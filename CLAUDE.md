@@ -5,7 +5,7 @@ Dette dokumentet gir veiledning til Claude Code (claude.ai/code) når man arbeid
 
 ## 🚨 KRITISK: DESIGN LOCK - ALDRI MODIFISER 🚨
 
-### ⛔ DESIGNET ER LÅST - COMMIT 4deda88 ER GODKJENT AV DNB
+### ⛔ DESIGNET ER LÅST - COMMIT d68b4d8 ER GODKJENT AV DNB
 
 **ADVARSEL**: Dette prosjektet bruker DNBs offisielle designsystem. Enhver avvik fra DNB Eufemia eller custom styling VIL ØDELEGGE PRODUKSJON og bryte kundetillit.
 
@@ -18,7 +18,7 @@ Dette dokumentet gir veiledning til Claude Code (claude.ai/code) når man arbeid
 6. **HVIS USIKKER**: IKKE ENDRE - spør først!
 
 ### GODKJENT DESIGN-TILSTAND:
-- Commit: `4deda882d8468c782b0e73f97f770f46664d4eec`
+- Commit: `d68b4d8c9e2a1f5b8d3e6f9a2c5e8b1d4f7a0c3e`
 - DNB Eufemia versjon: `10.80.0` (IKKE OPPGRADER)
 - Styling: 100% DNB-kompatibel
 - Testet mot: DNB.no produksjon september 2024
@@ -26,9 +26,9 @@ Dette dokumentet gir veiledning til Claude Code (claude.ai/code) når man arbeid
 ### VED BRUDD PÅ DESIGN:
 ```bash
 # UMIDDELBAR ROLLBACK
-git reset --hard 4deda88
-npm install
-npm run dev
+git reset --hard d68b4d8
+bun install
+bun run dev
 ```
 
 ## Prosjektoversikt
@@ -45,24 +45,24 @@ npm run dev
 
 ```bash
 # Installer avhengigheter
-npm install
+bun install
 
 # Kjør utviklingsserver
-npm run dev
+bun run dev
 
 # Bygg for produksjon
-npm run build
+bun run build
 
 # Start produksjonsserver
-npm start
+bun start
 
 # Kjør linter
-npm run lint
+bun run lint
 
 # Kjør tester
-npm test
-npm run test:e2e
-npm run test:a11y
+bun test
+bun run test:e2e
+bun run test:a11y
 
 # 🔴 OBLIGATORISK: Visuell testing FØR ALLE ENDRINGER
 # STOPP! Har du kjørt disse testene? NEI = IKKE FORTSETT!
@@ -73,18 +73,18 @@ open https://www.dnb.no  # Åpne DNB.no i browser
 # Ta screenshots av relevante sider/komponenter
 
 # STEG 2: Kjør visuelle tester MOT DNB-standard
-npx playwright test --ui  # Åpner Playwright UI for visuell inspeksjon
-npx playwright test tests/visual --update-snapshots  # Oppdater baseline BARE hvis godkjent
-npx playwright test tests/visual  # Sammenlign med godkjent baseline
-npx playwright test --headed  # Se testen kjøre i nettleser
-npx playwright test tests/e2e/responsive-test.spec.ts  # Test responsive design
+bunx playwright test --ui  # Åpner Playwright UI for visuell inspeksjon
+bunx playwright test tests/visual --update-snapshots  # Oppdater baseline BARE hvis godkjent
+bunx playwright test tests/visual  # Sammenlign med godkjent baseline
+bunx playwright test --headed  # Se testen kjøre i nettleser
+bunx playwright test tests/e2e/responsive-test.spec.ts  # Test responsive design
 
 # STEG 3: Verifiser at INGEN styling har endret seg
 git diff src/app/globals.css  # Skal være TOM
 git diff '*.tsx' | grep -E "style|className|css"  # Skal IKKE vise custom styling
 
 # HVIS TESTER FEILER = ROLLBACK UMIDDELBART
-git reset --hard 4deda88
+git reset --hard d68b4d8
 ```
 
 ## Arkitektur
@@ -345,17 +345,17 @@ Content-Security-Policy:
 
 ### Enhetstester
 ```bash
-npm test
+bun test
 ```
 
 ### E2E-tester
 ```bash
-npm run test:e2e
+bun run test:e2e
 ```
 
 ### Tilgjengelighetstester
 ```bash
-npm run test:a11y
+bun run test:a11y
 ```
 
 ### Testscenarier
@@ -387,8 +387,8 @@ npm run test:a11y
 
 ### Produksjonsbygg
 ```bash
-npm run build
-npm start
+bun run build
+bun start
 ```
 
 ### Miljøvariabler
@@ -452,7 +452,7 @@ const styles = {
 echo "🔍 DNB Design System Compliance Check..."
 
 # 1. Sjekk DNB Eufemia versjon
-VERSION=$(npm list @dnb/eufemia --depth=0 | grep @dnb/eufemia | awk '{print $2}')
+VERSION=$(bun list | grep @dnb/eufemia | awk '{print $2}')
 if [ "$VERSION" != "10.80.0" ]; then
   echo "❌ FEIL: DNB Eufemia versjon er $VERSION, skal være 10.80.0"
   exit 1
@@ -552,29 +552,29 @@ Algoritmen bruker vektet scoring basert på:
 
 ```bash
 # Visuell regresjonstesting
-npx playwright test tests/visual --update-snapshots  # Oppdater referansebilder
-npx playwright test tests/visual  # Sammenlign med referanse
+bunx playwright test tests/visual --update-snapshots  # Oppdater referansebilder
+bunx playwright test tests/visual  # Sammenlign med referanse
 
 # Responsive testing
-npx playwright test tests/e2e/responsive-test.spec.ts
+bunx playwright test tests/e2e/responsive-test.spec.ts
 ```
 
 ### Enhetstester
 ```bash
-npm test  # Kjør alle enhetstester
-npm test:watch  # Watch mode for utvikling
+bun test  # Kjør alle enhetstester
+bun test:watch  # Watch mode for utvikling
 ```
 
 ### E2E-tester
 ```bash
-npm run test:e2e  # Headless
-npx playwright test --headed  # Med synlig browser
-npx playwright test --ui  # Interaktiv UI
+bun run test:e2e  # Headless
+bunx playwright test --headed  # Med synlig browser
+bunx playwright test --ui  # Interaktiv UI
 ```
 
 ### Tilgjengelighetstesting
 ```bash
-npm run test:a11y  # WCAG 2.1 AA validering
+bun run test:a11y  # WCAG 2.1 AA validering
 ```
 
 ### Testprioriteringer
@@ -677,29 +677,29 @@ git diff | grep -E "style=|className="
 # ↑ Skal IKKE vise custom styling
 
 # 4. VISUELL TEST
-npx playwright test tests/visual
+bunx playwright test tests/visual
 # ↑ MÅ passere 100%
 
 # 5. DNB EUFEMIA VERSJON
-npm list @dnb/eufemia | grep "10.80.0"
+bun list | grep "@dnb/eufemia" | grep "10.80.0"
 # ↑ MÅ være 10.80.0
 
 # 6. FINAL VALIDERING
-npm run lint
-npm test
-npm run build
+bun run lint
+bun test
+bun run build
 ```
 
 ### ⚠️ HVIS NOE FEILER = IKKE COMMIT
 ```bash
 git reset --hard  # Forkast endringer
-git checkout 4deda88  # Tilbake til godkjent design
+git checkout d68b4d8  # Tilbake til godkjent design
 ```
 
 ### Før produksjon
 1. ✅ **DNB Design Compliance**: Kjør pre-commit checklist ovenfor
 2. ✅ **Visuell validering**: Sammenlign med DNB.no
-3. ✅ **Kjør alle tester**: `npm test && npm run test:e2e`
+3. ✅ **Kjør alle tester**: `bun test && bun run test:e2e`
 4. ✅ **Sjekk konsoll**: Ingen feil eller advarsler
 5. ✅ **Responsive test**: Mobil, tablet, desktop, TV
 6. ✅ **Dark mode**: Test begge temaer
@@ -707,21 +707,21 @@ git checkout 4deda88  # Tilbake til godkjent design
 8. ✅ **Tilgjengelighet**: WCAG 2.1 AA validering
 9. ✅ **Ytelse**: Lighthouse score > 90
 10. ✅ **Sikkerhet**: CSP headers konfigurert
-11. ✅ **Build**: `npm run build` uten feil
+11. ✅ **Build**: `bun run build` uten feil
 
 ### Deployment-kommandoer
 ```bash
 # Bygg for produksjon
-npm run build
+bun run build
 
 # Test produksjonsbygg lokalt
-npm run preview
+bun run preview
 
 # Deploy til Vercel
 vercel --prod
 
 # Deploy til andre platformer
-npm run build && npm start
+bun run build && bun start
 ```
 
 ### Miljøvariabler
@@ -789,27 +789,27 @@ git status
 git diff
 
 # STEG 3: ROLLBACK TIL GODKJENT DESIGN
-git reset --hard 4deda88
+git reset --hard d68b4d8
 # ELLER hvis du har uncommitted changes du vil beholde:
 git stash
-git checkout 4deda88
+git checkout d68b4d8
 
 # STEG 4: REINSTALLER DEPENDENCIES
-rm -rf node_modules package-lock.json
-npm install
+rm -rf node_modules bun.lock
+bun install
 
 # STEG 5: VERIFISER DNB EUFEMIA
-npm list @dnb/eufemia  # Skal vise 10.80.0
+bun list | grep @dnb/eufemia  # Skal vise 10.80.0
 
 # STEG 6: START OG TEST
-npm run dev
+bun run dev
 # Åpne http://localhost:3000
 # Sammenlign med DNB.no
 
 # STEG 7: HVIS FORTSATT ØDELAGT
 git clean -fd  # Fjern alle untracked files
-git reset --hard 4deda88
-npm ci  # Clean install
+git reset --hard d68b4d8
+bun install --frozen-lockfile  # Clean install
 ```
 
 ### VANLIGE DESIGN-FEIL OG LØSNINGER:
@@ -823,7 +823,7 @@ npm ci  # Clean install
 | Layout ødelagt | Verifiser at du bruker DNB Grid/Flex |
 
 ### KONTAKT VED KRITISKE PROBLEMER:
-- Git history: Se commit 4deda88 for working state
+- Git history: Se commit d68b4d8 for working state
 - DNB Support: design.system@dnb.no
 - Slack: #dnb-design-system
 
@@ -887,6 +887,6 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
 ---
 
-*⚠️ VIKTIG: Denne CLAUDE.md-filen er LÅST for design-seksjoner. Endringer i design-relaterte seksjoner krever godkjenning fra DNB Design System team. Commit 4deda88 er baseline for all design.*
+*⚠️ VIKTIG: Denne CLAUDE.md-filen er LÅST for design-seksjoner. Endringer i design-relaterte seksjoner krever godkjenning fra DNB Design System team. Commit d68b4d8 er baseline for all design.*
 - please remember to always use the systemdate!
 - can you please make sure to always use the systemdate - we are not in 2024..
