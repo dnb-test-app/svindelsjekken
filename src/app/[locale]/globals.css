@@ -1,0 +1,118 @@
+/* DNB Svindelsjekk Global Styles */
+/* Following DNB Eufemia design guidelines */
+
+:root {
+  /* DNB Brand Colors */
+  --color-sea-green: #007272;
+  --color-mint-green: #40BFBF;
+  --color-summer-green: #28a745;
+  --color-cherry-red: #c21e25;
+  --color-fire-red: #dc2626;
+  --color-ocean-blue: #0064FF;
+  --color-signal-orange: #FF9100;
+  
+  /* DNB Layout */
+  --layout-small: 40rem;
+  --layout-medium: 60rem;
+  --layout-large: 80rem;
+  --layout-x-large: 90rem;
+  
+  /* DNB Spacing */
+  --spacing-xx-small: 0.25rem;
+  --spacing-x-small: 0.5rem;
+  --spacing-small: 1rem;
+  --spacing-medium: 1.5rem;
+  --spacing-large: 2rem;
+  --spacing-x-large: 3rem;
+  --spacing-xx-large: 3.5rem;
+  --spacing-xxx-large: 4.5rem;
+  
+  /* DNB Typography */
+  --font-size-x-small: 0.875rem;
+  --font-size-small: 0.9375rem;
+  --font-size-basis: 1rem;
+  --font-size-medium: 1.125rem;
+  --font-size-large: 1.25rem;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 600;
+  
+  /* DNB Components */
+  --button-border-radius: 0.25rem;
+  --card-border-radius: 0.5rem;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: var(--color-white);
+  color: var(--color-black);
+}
+
+body {
+  font-family: 'DNB', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] {
+  --color-white: #1a1a1a;
+  --color-black: #ffffff;
+  --color-black-background: #0d0d0d;
+  --color-black-border: #2a2a2a;
+  --color-black-8: #2a2a2a;
+  --color-black-55: #8a8a8a;
+  --color-mint-green-12: rgba(64, 191, 191, 0.12);
+}
+
+/* Main layout */
+.app-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-container {
+  flex: 1;
+  width: 100%;
+}
+
+/* Config page styles */
+.config-page {
+  max-width: var(--layout-medium);
+  margin: 0 auto;
+  padding: 0 var(--spacing-medium);
+}
+
+/* Utility classes */
+.text-center {
+  text-align: center;
+}
+
+/* Links */
+a {
+  color: var(--color-ocean-blue);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--color-sea-green);
+  text-decoration: underline;
+}
+
+/* Focus styles for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--color-ocean-blue);
+  outline-offset: 2px;
+}

@@ -1,0 +1,6 @@
+# DNB Svindelsjekk Robots.txt
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://dnb-svindelsjekken.vercel.app/sitemap.xml
