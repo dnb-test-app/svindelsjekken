@@ -13,21 +13,40 @@ En minimalistisk webapplikasjon for svindeldeteksjon bygget med Next.js og DNB E
 
 - Next.js 14
 - TypeScript
+- Bun runtime
 - DNB Eufemia Design System
 - Responsive design
+- Docker support
 
 ## Installasjon
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
-## Bygging
+## Utvikling
 
 ```bash
-npm run build
-npm start
+# Installer avhengigheter
+bun install
+
+# Kjør utviklingsserver
+bun run dev
+
+# Bygg for produksjon
+bun run build
+bun start
+```
+
+## Docker
+
+```bash
+# Bygg Docker image
+docker build -t dnb-svindelsjekk .
+
+# Kjør container
+docker run -p 3000:3000 dnb-svindelsjekk
 ```
 
 ## DNBs budskap
