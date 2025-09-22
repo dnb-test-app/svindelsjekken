@@ -25,12 +25,14 @@ export default function ContextRefinement({
   };
 
   const handleRefineAnalysis = () => {
-    if (Object.keys(questionAnswers).length > 0 || additionalContext.trim().length > 0) {
+    const allQuestionsAnswered = followUpQuestions.length === Object.keys(questionAnswers).length;
+    if (allQuestionsAnswered) {
       onRefineAnalysis(questionAnswers, additionalContext);
     }
   };
 
-  const hasContext = Object.keys(questionAnswers).length > 0 || additionalContext.trim().length > 0;
+  const allQuestionsAnswered = followUpQuestions.length === Object.keys(questionAnswers).length;
+  const hasContext = allQuestionsAnswered;
 
   return (
     <div style={{
@@ -208,8 +210,8 @@ export default function ContextRefinement({
             </>
           ) : (
             <>
-              <span style={{ marginRight: 'var(--spacing-small)' }}>🔄</span>
-              Oppdater analyse
+              <span style={{ marginRight: 'var(--spacing-small)' }}>🔍</span>
+              Se resultater
             </>
           )}
         </Button>
@@ -224,7 +226,7 @@ export default function ContextRefinement({
           textAlign: 'center',
           fontStyle: 'italic'
         }}>
-          Svar JA eller NEI på minst ett spørsmål, eller skriv inn tilleggsinformasjon
+          Du må svare JA eller NEI på alle spørsmålene for å fortsette
         </p>
       )}
     </div>
