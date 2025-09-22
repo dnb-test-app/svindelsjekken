@@ -2,21 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { parseFraudAnalysis } from '@/lib/utils/jsonParser';
 import { isMinimalContextURL } from '@/lib/urlAnalyzer';
 import { needsWebSearchVerification, getWebSearchReasons } from '@/lib/fraudDetection';
+import { fraudAnalysisSchema, supportsStructuredOutput, supportsNativeJSONSchema, type FraudAnalysisResponse } from '@/lib/schemas/fraudAnalysis';
 
-// Known models for UI display hints only (not validation)
-// Any model can be used via environment variable or user selection
-const AVAILABLE_MODELS = {
-  'openai/gpt-4o-mini': { name: 'GPT-4o Mini', speed: 'fast', cost: 'low' },
-  'openai/gpt-5-mini': { name: 'GPT-5 Mini', speed: 'fast', cost: 'medium' },
-  'openai/gpt-5': { name: 'GPT-5', speed: 'medium', cost: 'high' },
-  'openai/gpt-4o': { name: 'GPT-4o', speed: 'medium', cost: 'medium' },
-  'anthropic/claude-opus-4': { name: 'Claude 4 Opus', speed: 'slow', cost: 'high' },
-  'anthropic/claude-sonnet-4': { name: 'Claude 4 Sonnet', speed: 'medium', cost: 'medium' },
-  'anthropic/claude-3.5-sonnet': { name: 'Claude 3.5 Sonnet', speed: 'fast', cost: 'medium' },
-  'google/gemini-2.5-pro': { name: 'Gemini 2.5 Pro', speed: 'medium', cost: 'medium' },
-  'google/gemini-2.5-flash': { name: 'Gemini 2.5 Flash', speed: 'fast', cost: 'low' },
-  'meta-llama/llama-3.3-70b-instruct': { name: 'Llama 3.3 70B', speed: 'fast', cost: 'free' },
-};
+// Helper function to get basic model info from ID
+function getModelInfo(modelId: string) {
+  const provider = modelId.split('/')[0] || 'unknown';
+  const modelName = modelId.split('/')[1] || modelId;
+
+  return {
+    name: modelName,
+    provider: provider,
+    supportsStructuredOutput: supportsStructuredOutput(modelId),
+    supportsNativeJSONSchema: supportsNativeJSONSchema(modelId)
+  };
+}
 
 const createEnhancedFraudPrompt = (text: string, context?: { questionAnswers?: Record<string, 'yes' | 'no'>, additionalContext?: string }, hasMinimalContext: boolean = false, enableWebSearch: boolean = false): string => {
   const currentDate = new Date().toLocaleDateString('no-NO', {
@@ -440,37 +439,52 @@ UTDANNINGSPRINSIPPER:
   return basePrompt;
 };
 
-// Check if model likely supports JSON based on provider
+// Check if model likely supports JSON based on provider (legacy function)
 const supportsJSON = (model: string) => {
-  const provider = model.split('/')[0];
-  // Most modern models from major providers support JSON
-  return ['openai', 'anthropic', 'google'].includes(provider) ||
-         model.includes('gpt') ||
-         model.includes('claude') ||
-         model.includes('gemini');
+  // Use the new schema-aware function primarily
+  return supportsStructuredOutput(model);
 };
 
 // Helper function to call OpenRouter API with a specific model
-async function callOpenRouterAPI(model: string, text: string, apiKey: string, context?: { questionAnswers?: Record<string, 'yes' | 'no'>, additionalContext?: string }, hasMinimalContext: boolean = false, enableWebSearch: boolean = false) {
+async function callOpenRouterAPI(model: string, text: string, apiKey: string, context?: { questionAnswers?: Record<string, 'yes' | 'no'>, additionalContext?: string, imageData?: { base64: string, mimeType: string }, additionalText?: string }, hasMinimalContext: boolean = false, enableWebSearch: boolean = false) {
   const prompt = createEnhancedFraudPrompt(text, context, hasMinimalContext, enableWebSearch);
 
   // Modify model name for web search
   const searchModel = enableWebSearch ? `${model}:online` : model;
 
+  // Create user message content
+  let userMessage: any;
+
+  if (context?.imageData) {
+    // Vision model request with image
+    userMessage = {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: `Analyser dette bildet for tegn på svindel. ${context.additionalText ? `Tilleggsinformasjon: ${context.additionalText}` : ''}\n\n${prompt}`
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:${context.imageData.mimeType};base64,${context.imageData.base64}`
+          }
+        }
+      ]
+    };
+  } else {
+    // Text-only request
+    userMessage = {
+      role: 'user',
+      content: prompt
+    };
+  }
+
   const requestBody: any = {
     model: searchModel,
-    messages: [
-      {
-        role: 'system',
-        content: 'You are an expert fraud detection specialist. You MUST respond with ONLY valid JSON - no explanations, no additional text, no markdown, no code blocks. Just pure JSON that can be parsed directly.'
-      },
-      {
-        role: 'user',
-        content: prompt
-      }
-    ],
-    temperature: 0.3,
-    max_tokens: 500
+    messages: [userMessage],
+    temperature: 0, // Use 0 for consistent structured output
+    max_tokens: 1000 // Increase for more detailed structured responses
   };
 
   // Add web search plugin if enabled
@@ -482,8 +496,15 @@ async function callOpenRouterAPI(model: string, text: string, apiKey: string, co
     }];
   }
 
-  // Only add response_format for models that support it
-  if (supportsJSON(model)) {
+  // Add structured output support - prefer native JSON schema when available
+  if (supportsNativeJSONSchema(model)) {
+    // Use native JSON schema for OpenAI models (most reliable)
+    requestBody.response_format = {
+      type: 'json_schema',
+      json_schema: fraudAnalysisSchema
+    };
+  } else if (supportsJSON(model)) {
+    // Fallback to basic JSON object format for other compatible models
     requestBody.response_format = { type: 'json_object' };
   }
 
@@ -522,7 +543,62 @@ export async function POST(request: NextRequest) {
   try {
     const defaultModel = process.env.DEFAULT_AI_MODEL || 'openai/gpt-4o-mini';
     const backupModel = process.env.BACKUP_AI_MODEL || 'openai/gpt-4o-mini';
-    const { text, model = defaultModel, context } = await request.json();
+
+    let text: string;
+    let model = defaultModel;
+    let context: any = undefined;
+    let ocrUsed = false;
+
+    // Check if this is a FormData request (image upload) or JSON request (text)
+    const contentType = request.headers.get('content-type') || '';
+
+    if (contentType.includes('multipart/form-data')) {
+      // Handle image upload with FormData
+      const formData = await request.formData();
+      const imageFile = formData.get('image') as File;
+      const additionalText = formData.get('text') as string;
+      const modelParam = formData.get('model') as string;
+
+      if (modelParam) model = modelParam;
+
+      if (!imageFile) {
+        return NextResponse.json(
+          { error: 'No image file provided' },
+          { status: 400 }
+        );
+      }
+
+      // Convert image to base64 for AI model
+      const arrayBuffer = await imageFile.arrayBuffer();
+      const base64Image = Buffer.from(arrayBuffer).toString('base64');
+      const mimeType = imageFile.type || 'image/jpeg';
+
+      // Store image data for AI analysis
+      context = {
+        imageData: {
+          base64: base64Image,
+          mimeType: mimeType
+        },
+        additionalText: additionalText?.trim() || ''
+      };
+
+      // Use a placeholder text that will trigger vision analysis
+      text = `Analyser dette bildet for svindel. ${additionalText || ''}`.trim();
+      ocrUsed = false; // We're using vision, not OCR
+    } else {
+      // Handle standard JSON request
+      const body = await request.json();
+      text = body.text;
+      model = body.model || defaultModel;
+      context = body.context;
+
+      // Handle image data in JSON requests (unified approach)
+      if (context?.imageData && (!text || text.trim().length === 0)) {
+        // For image-only analysis, create appropriate text like FormData approach
+        const additionalText = context.additionalText || '';
+        text = `Analyser dette bildet for svindel. ${additionalText}`.trim();
+      }
+    }
 
     // Detect if this is a minimal context URL
     const hasMinimalContext = isMinimalContextURL(text);
@@ -537,10 +613,10 @@ export async function POST(request: NextRequest) {
       webSearchReasons
     });
 
-    // Validate input
+    // Validate extracted text
     if (!text || text.trim().length < 5) {
       return NextResponse.json(
-        { error: 'Text too short for analysis' },
+        { error: 'Text too short for analysis. Please provide more content or a clearer image.' },
         { status: 400 }
       );
     }
@@ -558,72 +634,59 @@ export async function POST(request: NextRequest) {
     // Use the requested model (let OpenRouter validate)
     const selectedModel = model;
 
-    let finalResult;
-    let usedModel = selectedModel;
-    let backupUsed = false;
-
+    // Direct API call with no fallbacks - require structured output
     try {
-      // Try primary model first
-      const primaryContent = await callOpenRouterAPI(selectedModel, text, apiKey, context, hasMinimalContext, needsWebSearch);
-      const primaryParseResult = parseFraudAnalysis(primaryContent);
+      const content = await callOpenRouterAPI(selectedModel, text, apiKey, context, hasMinimalContext, needsWebSearch);
+      const parseResult = parseFraudAnalysis(content);
 
-      if (primaryParseResult.success) {
-        finalResult = primaryParseResult;
-      } else {
-        console.log(`Primary model ${selectedModel} failed to parse, trying backup ${backupModel}`);
+      if (!parseResult.success) {
+        console.error('Failed to parse structured output:', parseResult.error);
+        console.error('Raw response:', parseResult.originalContent);
 
-        // Try backup model if primary parsing failed
-        if (selectedModel !== backupModel) {
-          try {
-            const backupContent = await callOpenRouterAPI(backupModel, text, apiKey, context, hasMinimalContext, needsWebSearch);
-            const backupParseResult = parseFraudAnalysis(backupContent);
-
-            if (backupParseResult.success) {
-              finalResult = backupParseResult;
-              usedModel = backupModel;
-              backupUsed = true;
-              console.log(`Backup model ${backupModel} succeeded`);
-            } else {
-              // Both models failed to parse
-              return NextResponse.json(
-                {
-                  error: 'Kunne ikke tolke svar fra verken primær eller backup AI-modell',
-                  details: `Prøvde ${selectedModel} og ${backupModel}`,
-                  primaryError: primaryParseResult.error,
-                  backupError: backupParseResult.error
-                },
-                { status: 500 }
-              );
-            }
-          } catch (backupError) {
-            console.error('Backup model failed:', backupError);
-            return NextResponse.json(
-              {
-                error: 'Primær AI-modell feilet parsing og backup-modell feilet helt',
-                details: `Primær: ${selectedModel}, Backup: ${backupModel}`,
-                primaryError: primaryParseResult.error,
-                backupError: backupError instanceof Error ? backupError.message : 'Unknown error'
-              },
-              { status: 500 }
-            );
-          }
-        } else {
-          // Primary and backup are the same model, no point in retrying
-          return NextResponse.json(
-            {
-              error: 'AI-modell kunne ikke produsere gyldig JSON',
-              details: `Modell: ${selectedModel}`,
-              parseError: primaryParseResult.error
-            },
-            { status: 500 }
-          );
-        }
+        return NextResponse.json(
+          {
+            error: 'AI modell returnerte ikke gyldig strukturert output',
+            details: `Modell: ${selectedModel}`,
+            parseError: parseResult.error,
+            message: 'Denne modellen støtter ikke strukturert output eller er feilkonfigurert'
+          },
+          { status: 500 }
+        );
       }
-    } catch (primaryError) {
-      console.error('Primary model API call failed:', primaryError);
 
-      // Handle specific API errors for primary model
-      if (primaryError instanceof Error && primaryError.message.includes('Rate limit')) {
+      // Create response with metadata
+      const aiAnalysis: any = {
+        ...parseResult.data,
+        model: selectedModel,
+        modelInfo: getModelInfo(selectedModel),
+        timestamp: new Date().toISOString(),
+        ...(needsWebSearch && {
+          webSearchUsed: true,
+          webSearchReasons: webSearchReasons,
+          enhancedVerification: true
+        }),
+        ...(supportsNativeJSONSchema(selectedModel) && {
+          structuredOutputUsed: true,
+          schemaType: 'native_json_schema'
+        }),
+        ...(supportsStructuredOutput(selectedModel) && !supportsNativeJSONSchema(selectedModel) && {
+          structuredOutputUsed: true,
+          schemaType: 'json_object'
+        }),
+        ...(context?.imageData && {
+          visionProcessed: true,
+          imageProcessed: true,
+          imageAnalyzed: true
+        })
+      };
+
+      return NextResponse.json(aiAnalysis);
+
+    } catch (error) {
+      console.error('API call failed:', error);
+
+      // Handle specific API errors
+      if (error instanceof Error && error.message.includes('Rate limit')) {
         return NextResponse.json(
           {
             error: 'Rate limit exceeded',
@@ -634,78 +697,18 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Try backup model if primary API call failed
-      if (selectedModel !== backupModel) {
-        try {
-          console.log(`Primary model ${selectedModel} API failed, trying backup ${backupModel}`);
-          const backupContent = await callOpenRouterAPI(backupModel, text, apiKey, context, hasMinimalContext, needsWebSearch);
-          const backupParseResult = parseFraudAnalysis(backupContent);
-
-          if (backupParseResult.success) {
-            finalResult = backupParseResult;
-            usedModel = backupModel;
-            backupUsed = true;
-            console.log(`Backup model ${backupModel} succeeded after primary API failure`);
-          } else {
-            return NextResponse.json(
-              {
-                error: 'Begge AI-modeller feilet',
-                details: `Primær API feil: ${selectedModel}, Backup parsing feil: ${backupModel}`,
-                primaryError: primaryError instanceof Error ? primaryError.message : 'Unknown error',
-                backupError: backupParseResult.error
-              },
-              { status: 500 }
-            );
-          }
-        } catch (backupError) {
-          return NextResponse.json(
-            {
-              error: 'Begge AI-modeller feilet fullstendig',
-              details: `Primær: ${selectedModel}, Backup: ${backupModel}`,
-              primaryError: primaryError instanceof Error ? primaryError.message : 'Unknown error',
-              backupError: backupError instanceof Error ? backupError.message : 'Unknown error'
-            },
-            { status: 500 }
-          );
-        }
-      } else {
-        return NextResponse.json(
-          {
-            error: 'AI-modell API feilet',
-            details: primaryError instanceof Error ? primaryError.message : 'Unknown error'
-          },
-          { status: 500 }
-        );
-      }
+      return NextResponse.json(
+        {
+          error: 'AI-tjenesten er ikke tilgjengelig',
+          details: `Modell: ${selectedModel}`,
+          apiError: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { status: 500 }
+      );
     }
-
-    // Log successful parsing with fallback info if used
-    if (finalResult.fallbackUsed && finalResult.fallbackUsed !== 'direct_parse') {
-      console.log('Used fallback parsing strategy:', {
-        strategy: finalResult.fallbackUsed,
-        model: usedModel,
-        success: true
-      });
-    }
-
-    // Create response with metadata
-    const aiAnalysis: any = {
-      ...finalResult.data,
-      model: usedModel,
-      modelInfo: AVAILABLE_MODELS[usedModel as keyof typeof AVAILABLE_MODELS],
-      timestamp: new Date().toISOString(),
-      ...(backupUsed && { backupModelUsed: true, originalModel: selectedModel }),
-      ...(needsWebSearch && {
-        webSearchUsed: true,
-        webSearchReasons: webSearchReasons,
-        enhancedVerification: true
-      })
-    };
-
-    return NextResponse.json(aiAnalysis);
 
   } catch (error: any) {
-    console.error('Error in analyze-advanced:', error);
+    console.error('Error in analyze:', error);
     
     return NextResponse.json(
       { error: `AI-analyse feilet: ${error.message || 'Ukjent feil'}` },
@@ -716,10 +719,17 @@ export async function POST(request: NextRequest) {
 
 // GET endpoint to check available models
 export async function GET() {
+  const defaultModel = process.env.DEFAULT_AI_MODEL || 'openai/gpt-4o-mini';
+
   return NextResponse.json({
-    models: AVAILABLE_MODELS,
-    defaultModel: process.env.DEFAULT_AI_MODEL || 'openai/gpt-4o-mini',
+    defaultModel: defaultModel,
+    defaultModelInfo: getModelInfo(defaultModel),
     status: 'ready',
-    apiKeyConfigured: !!process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== 'your_openrouter_api_key_here'
+    apiKeyConfigured: !!process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== 'your_openrouter_api_key_here',
+    featuresSupported: {
+      structuredOutput: true,
+      nativeJSONSchema: true,
+      webSearch: true
+    }
   });
 }

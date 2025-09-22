@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supportsStructuredOutput, supportsNativeJSONSchema } from '@/lib/schemas/fraudAnalysis';
 
 // Minimal fraud detection prompt for testing
 const TEST_FRAUD_PROMPT = `Du er en svindeldeteksjonsekspert. Analyser denne teksten kort:
@@ -31,6 +32,8 @@ interface ModelTestResult {
   name: string;
   working: boolean;
   supportsJson: boolean;
+  supportsStructuredOutput?: boolean;
+  supportsNativeJSONSchema?: boolean;
   speed?: string;
   cost?: string;
   error?: string;
@@ -342,6 +345,8 @@ export async function GET(request: NextRequest) {
         name: model.name || model.id,
         working: isVerified,
         supportsJson: hasJsonSupport,
+        supportsStructuredOutput: supportsStructuredOutput(model.id),
+        supportsNativeJSONSchema: supportsNativeJSONSchema(model.id),
         status: isVerified ? 'verified' : 'untested',
         provider: provider,
         contextLength: model.context_length
@@ -455,6 +460,8 @@ export async function GET(request: NextRequest) {
         totalProviders: Object.keys(modelsByProvider).length,
         averageScore: Math.round(modelsWithScore.reduce((sum, m) => sum + m.performanceScore, 0) / modelsWithScore.length),
         withJsonSupport: modelsWithScore.filter(m => m.supportsJson).length,
+        withStructuredOutput: modelsWithScore.filter(m => m.supportsStructuredOutput).length,
+        withNativeJSONSchema: modelsWithScore.filter(m => m.supportsNativeJSONSchema).length,
         freeModels: modelsWithScore.filter(m => m.cost === 'free').length
       }
     });

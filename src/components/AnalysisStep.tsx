@@ -8,7 +8,8 @@ import {
   FormRow,
   Space,
   Card,
-  Icon
+  Icon,
+  ProgressIndicator
 } from '@dnb/eufemia';
 
 interface AnalysisStepProps {
@@ -37,6 +38,47 @@ export default function AnalysisStep({
   onRemoveImage
 }: AnalysisStepProps) {
   const isButtonDisabled = (text.trim().length < 5 && !imagePreview) || isAnalyzing;
+
+  // Show spinner when analyzing
+  if (isAnalyzing) {
+    return (
+      <div style={{
+        maxWidth: '48rem',
+        margin: '0 auto',
+        textAlign: 'center',
+        padding: 'var(--spacing-xx-large)'
+      }}>
+        <div style={{
+          background: 'var(--color-mint-green-12)',
+          border: '2px solid var(--color-sea-green-30)',
+          borderRadius: '12px',
+          padding: 'var(--spacing-x-large)',
+        }}>
+          <div style={{ marginBottom: 'var(--spacing-medium)' }}>
+            <ProgressIndicator
+              size="large"
+              type="circular"
+              style={{
+                '--progress-indicator-color': 'var(--color-sea-green)',
+                marginBottom: 'var(--spacing-medium)'
+              }}
+            />
+          </div>
+          <h3 style={{
+            margin: '0 0 var(--spacing-small) 0',
+            fontSize: 'var(--font-size-x-large)',
+            fontWeight: 600,
+            color: 'var(--color-sea-green)'
+          }}>
+            Analyserer med AI...
+          </h3>
+          <P size="medium" style={{ color: 'var(--color-black-60)' }}>
+            Vi bruker avansert AI for å gi deg den mest nøyaktige analysen basert på konteksten du oppga.
+          </P>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: '48rem', margin: '0 auto' }}>

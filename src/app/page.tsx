@@ -66,7 +66,7 @@ export default function Home() {
       }
     }
 
-    fetch("/api/analyze-advanced")
+    fetch("/api/analyze")
       .then((res) => res.json())
       .then((data) => {
         const apiDefaultModel = data.defaultModel || "openai/gpt-4o-mini";
@@ -350,7 +350,7 @@ export default function Home() {
 
           // Send to API for OCR and analysis
           updateTarget(70); // Uploading
-          const response = await fetch("/api/analyze-image", {
+          const response = await fetch("/api/analyze", {
             method: "POST",
             body: formData,
           });
@@ -498,7 +498,7 @@ export default function Home() {
     }
   }, []);
 
-  // Process file with additional text context
+  // Process file with additional text context using unified JSON approach
   const processFileWithContext = useCallback(async (file: File, additionalText: string) => {
     setIsProcessingImage(true);
     setOcrProgress(0);
@@ -545,35 +545,58 @@ export default function Home() {
           }
         }
 
-        // Prepare form data
         updateTarget(35);
-        const formData = new FormData();
-        formData.append("image", fileToUpload);
-        formData.append("model", selectedModel);
 
-        // Add additional text context if provided
-        if (additionalText.trim()) {
-          formData.append("additionalContext", additionalText.trim());
-        }
+        // Convert file to base64 for unified JSON approach
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64Data = result.split(',')[1]; // Remove data:type;base64, prefix
+            resolve(base64Data);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(fileToUpload);
+        });
 
         updateTarget(50);
 
-        // Send to API for OCR and analysis
+        const modelToUse = typeof selectedModel === "string" ? selectedModel : defaultModel;
+
+        // Prepare context data for unified approach
+        const contextData = {
+          imageData: {
+            base64: base64,
+            mimeType: fileToUpload.type,
+          },
+          additionalText: additionalText.trim() || undefined,
+        };
+
         updateTarget(70);
-        const response = await fetch("/api/analyze-image", {
+
+        // Use unified JSON API approach
+        const response = await fetch("/api/analyze", {
           method: "POST",
-          body: formData,
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            text: "",  // Empty text for image-only analysis
+            model: modelToUse,
+            context: contextData,
+          }),
         });
 
         updateTarget(85);
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error("Upload error:", response.status, errorText);
+          console.error("API error:", errorText);
           throw new Error(`Upload feilet: ${errorText || "Ukjent feil"}`);
         }
 
-        const result = await response.json();
+        const aiResult = await response.json();
+        setAiAnalysis(aiResult);
         updateTarget(95);
 
         // Final completion
@@ -585,43 +608,46 @@ export default function Home() {
           }, 300);
         }, 200);
 
-        if (result.extractedText) {
-          // If API already provided analysis, use it
-          if (result.fraudProbability !== undefined) {
-            const analysisResult = {
-              category: result.category || "safe",
-              score: result.fraudProbability,
-              risk: result.riskLevel || "low",
-              triggers: result.mainIndicators?.map((ind: string) => ({
-                pattern: ind,
-                category: "api_detected",
-                weight: 10,
-              })) || [],
-              categories: ["api_analysis"],
-              aiEnhanced: true,
-              recommendation: result.recommendation,
-              summary: result.summary,
-              isImageAnalysis: true,
-              extractedText: result.extractedText,
-              additionalContext: additionalText,
-              urlsFound: result.urlsFound || [],
-              webSearchResults: result.webSearchResults || {},
-            };
+        // Use unified result format
+        const analysisResult = {
+          category: aiResult.category || "safe",
+          score: aiResult.fraudProbability || 0,
+          risk: aiResult.riskLevel || "low",
+          triggers:
+            aiResult.mainIndicators?.map((ind: string) => ({
+              pattern: ind,
+              category: "ai_detected",
+              weight: 10,
+            })) || [],
+          categories: ["ai_analysis"],
+          aiEnhanced: true,
+          recommendation: aiResult.recommendation,
+          summary: aiResult.summary,
+          isImageAnalysis: true,
+          additionalContext: additionalText,
+          educationalContext: aiResult.educationalContext || null,
+          verificationGuide: aiResult.verificationGuide || null,
+          actionableSteps: aiResult.actionableSteps || [],
+        };
 
-            // Check if follow-up questions exist
-            if (result.followUpQuestions && result.followUpQuestions.length > 0) {
-              setPreliminaryAnalysis(analysisResult);
-              setRequiresRefinement(true);
-              stepperState.markStepCompleted(1);
-              stepperState.goToStep(2);
-            } else {
-              setResult(analysisResult);
-              setRequiresRefinement(false);
-              stepperState.markStepCompleted(1);
-              stepperState.markStepCompleted(2);
-              stepperState.goToStep(3);
-            }
-          }
+        // Check if context refinement is needed (unified logic)
+        const needsRefinement =
+          aiResult.category === "context-required" ||
+          (aiResult.followUpQuestions && aiResult.followUpQuestions.length > 0);
+
+        if (needsRefinement) {
+          // Store preliminary analysis and advance to Step 2
+          setPreliminaryAnalysis(analysisResult);
+          setRequiresRefinement(true);
+          stepperState.markStepCompleted(1);
+          stepperState.goToStep(2);
+        } else {
+          // No context refinement needed, go directly to Step 3
+          setResult(analysisResult);
+          setRequiresRefinement(false);
+          stepperState.markStepCompleted(1);
+          stepperState.markStepCompleted(2);
+          stepperState.goToStep(3);
         }
       }
     } catch (error: any) {
@@ -635,7 +661,7 @@ export default function Home() {
         setIsAnalyzing(false);
       }, 500);
     }
-  }, [selectedModel, compressImage, stepperState]);
+  }, [selectedModel, compressImage, stepperState, defaultModel]);
 
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -752,7 +778,7 @@ export default function Home() {
               }
             : undefined;
 
-        const response = await fetch("/api/analyze-advanced", {
+        const response = await fetch("/api/analyze", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -821,18 +847,19 @@ export default function Home() {
             actionableSteps: aiResult.actionableSteps || [],
           };
 
-          // Check if follow-up questions exist
-          if (
-            aiResult.followUpQuestions &&
-            aiResult.followUpQuestions.length > 0
-          ) {
+          // Check if context refinement is needed
+          const needsRefinement =
+            aiResult.category === "context-required" ||
+            (aiResult.followUpQuestions && aiResult.followUpQuestions.length > 0);
+
+          if (needsRefinement) {
             // Store preliminary analysis and advance to Step 2
             setPreliminaryAnalysis(analysisResult);
             setRequiresRefinement(true);
             stepperState.markStepCompleted(1);
             stepperState.goToStep(2);
           } else {
-            // No follow-up questions needed, go directly to Step 3
+            // No context refinement needed, go directly to Step 3
             setResult(analysisResult);
             setRequiresRefinement(false);
             stepperState.markStepCompleted(1);
@@ -899,7 +926,8 @@ export default function Home() {
     questionAnswers: Record<string, "yes" | "no">,
     refinementContext: string,
   ) => {
-    if (!text || text.trim().length < 5) return;
+    // Allow refinement if we have either sufficient text OR an image
+    if ((!text || text.trim().length < 5) && !imagePreview) return;
 
     setIsAnalyzing(true);
     setAiAnalysis(null);
@@ -921,7 +949,7 @@ export default function Home() {
         combinedContext = `Kontekst for lenke: ${additionalContext.trim()}\n\nYtterligere informasjon: ${refinementContext}`;
       }
 
-      const response = await fetch("/api/analyze-advanced", {
+      const response = await fetch("/api/analyze", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1345,9 +1373,18 @@ export default function Home() {
                       <P size="small" style={{ margin: 0 }}>
                         <strong>Current:</strong> {(() => {
                           const current = availableModels.find(m => m.id === selectedModel);
-                          return current ?
-                            `${current.name || current.id.split('/')[1]} (${current.provider}) ${current.supportsJson ? '✅ JSON' : ''}`
-                            : selectedModel;
+                          if (!current) return selectedModel;
+
+                          let schemaSupport = '';
+                          if (current.supportsNativeJSONSchema) {
+                            schemaSupport = ' 🎯 Native Schema';
+                          } else if (current.supportsStructuredOutput) {
+                            schemaSupport = ' 📋 Structured';
+                          } else if (current.supportsJson) {
+                            schemaSupport = ' ✅ JSON';
+                          }
+
+                          return `${current.name || current.id.split('/')[1]} (${current.provider})${schemaSupport}`;
                         })()}
                       </P>
                     </div>
@@ -1408,7 +1445,9 @@ export default function Home() {
                             </div>
                           </div>
                           <div style={{ fontSize: '0.75rem' }}>
-                            {model.supportsJson && <span title="Supports JSON">✅</span>}
+                            {model.supportsNativeJSONSchema && <span title="Native JSON Schema Support">🎯</span>}
+                            {model.supportsStructuredOutput && !model.supportsNativeJSONSchema && <span title="Structured Output Support">📋</span>}
+                            {model.supportsJson && !model.supportsStructuredOutput && <span title="Basic JSON Support">✅</span>}
                             {model.status === 'verified' && <span title="Verified working"> ⚡</span>}
                             {selectedModel === model.id && <span style={{ color: 'var(--color-sea-green)' }}> ●</span>}
                           </div>
@@ -1471,27 +1510,6 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Show preliminary analysis summary */}
-            {preliminaryAnalysis && (
-              <div style={{
-                background: 'var(--color-mint-green-12)',
-                border: '1px solid var(--color-sea-green-30)',
-                borderRadius: '8px',
-                padding: 'var(--spacing-medium)',
-                marginBottom: 'var(--spacing-large)'
-              }}>
-                <h3 style={{
-                  color: 'var(--color-sea-green)',
-                  fontSize: 'var(--font-size-large)',
-                  margin: '0 0 var(--spacing-small) 0'
-                }}>
-                  Foreløpig analyse
-                </h3>
-                <p style={{ margin: 0, fontSize: 'var(--font-size-basis)' }}>
-                  {preliminaryAnalysis.summary}
-                </p>
-              </div>
-            )}
 
             {/* Context Refinement */}
             {aiAnalysis && aiAnalysis.followUpQuestions && (
