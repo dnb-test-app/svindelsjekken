@@ -45,6 +45,7 @@ export default function Home() {
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [ocrProgress, setOcrProgress] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [ocrExtractedText, setOcrExtractedText] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // URL detection states
@@ -479,7 +480,7 @@ export default function Home() {
     [selectedModel, compressImage, stepperState],
   );
 
-  // Simplified file processing that just stores the file and preview
+  // Simplified file processing that stores file, preview, and extracts OCR text
   const storeFile = useCallback(async (file: File) => {
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
@@ -490,178 +491,45 @@ export default function Home() {
     // Store the file for later analysis
     setUploadedFile(file);
 
-    // Show preview for images
+    // Show preview and extract OCR text for images
     if (file.type.startsWith("image/")) {
       const reader = new FileReader();
-      reader.onload = (e) => setImagePreview(e.target?.result as string);
+      reader.onload = async (e) => {
+        const imageDataUrl = e.target?.result as string;
+        setImagePreview(imageDataUrl);
+
+        // Run lightweight OCR to extract text
+        try {
+          setIsProcessingImage(true);
+          setOcrProgress(10);
+
+          const { createWorker } = await import('tesseract.js');
+          const worker = await createWorker('nor+eng');
+
+          setOcrProgress(50);
+          const { data: { text: extractedText } } = await worker.recognize(imageDataUrl);
+          await worker.terminate();
+
+          setOcrProgress(100);
+
+          // Store the extracted text separately and also set as main text input
+          if (extractedText.trim()) {
+            setOcrExtractedText(extractedText.trim());
+            setText(extractedText.trim());
+          }
+
+        } catch (error) {
+          console.error('OCR extraction failed:', error);
+        } finally {
+          setTimeout(() => {
+            setIsProcessingImage(false);
+            setOcrProgress(0);
+          }, 500);
+        }
+      };
       reader.readAsDataURL(file);
     }
   }, []);
-
-  // Process file with additional text context using unified JSON approach
-  const processFileWithContext = useCallback(async (file: File, additionalText: string) => {
-    setIsProcessingImage(true);
-    setOcrProgress(0);
-
-    // Smooth continuous progress animation
-    let progressAnimation: NodeJS.Timeout | null = null;
-    let currentProgress = 0;
-    let targetProgress = 10;
-
-    const animateProgress = () => {
-      progressAnimation = setInterval(() => {
-        if (currentProgress < targetProgress) {
-          currentProgress += Math.random() * 1.5 + 0.5;
-          if (currentProgress > targetProgress) currentProgress = targetProgress;
-          setOcrProgress(Math.floor(currentProgress));
-        }
-      }, 150);
-    };
-
-    const updateTarget = (newTarget: number) => {
-      targetProgress = newTarget;
-    };
-
-    const stopProgress = () => {
-      if (progressAnimation) {
-        clearInterval(progressAnimation);
-        progressAnimation = null;
-      }
-    };
-
-    animateProgress();
-
-    try {
-      if (file.type.startsWith("image/") || file.type === "application/pdf") {
-        // Compress image if needed
-        let fileToUpload = file;
-        if (file.type.startsWith("image/") || file.name.toLowerCase().match(/\.(heic|heif|jpg|jpeg|png|webp)$/)) {
-          updateTarget(25);
-          try {
-            fileToUpload = await compressImage(file);
-          } catch (error) {
-            console.warn("Image compression failed, using original file:", error);
-            fileToUpload = file;
-          }
-        }
-
-        updateTarget(35);
-
-        // Convert file to base64 for unified JSON approach
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            const base64Data = result.split(',')[1]; // Remove data:type;base64, prefix
-            resolve(base64Data);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(fileToUpload);
-        });
-
-        updateTarget(50);
-
-        const modelToUse = typeof selectedModel === "string" ? selectedModel : defaultModel;
-
-        // Prepare context data for unified approach
-        const contextData = {
-          imageData: {
-            base64: base64,
-            mimeType: fileToUpload.type,
-          },
-          additionalText: additionalText.trim() || undefined,
-        };
-
-        updateTarget(70);
-
-        // Use unified JSON API approach
-        const response = await fetch("/api/analyze", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            text: "",  // Empty text for image-only analysis
-            model: modelToUse,
-            context: contextData,
-          }),
-        });
-
-        updateTarget(85);
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("API error:", errorText);
-          throw new Error(`Upload feilet: ${errorText || "Ukjent feil"}`);
-        }
-
-        const aiResult = await response.json();
-        setAiAnalysis(aiResult);
-        updateTarget(95);
-
-        // Final completion
-        setTimeout(() => {
-          updateTarget(100);
-          setTimeout(() => {
-            currentProgress = 100;
-            setOcrProgress(100);
-          }, 300);
-        }, 200);
-
-        // Use unified result format
-        const analysisResult = {
-          category: aiResult.category || "safe",
-          score: aiResult.fraudProbability || 0,
-          risk: aiResult.riskLevel || "low",
-          triggers:
-            aiResult.mainIndicators?.map((ind: string) => ({
-              pattern: ind,
-              category: "ai_detected",
-              weight: 10,
-            })) || [],
-          categories: ["ai_analysis"],
-          aiEnhanced: true,
-          recommendation: aiResult.recommendation,
-          summary: aiResult.summary,
-          isImageAnalysis: true,
-          additionalContext: additionalText,
-          educationalContext: aiResult.educationalContext || null,
-          verificationGuide: aiResult.verificationGuide || null,
-          actionableSteps: aiResult.actionableSteps || [],
-        };
-
-        // Check if context refinement is needed (unified logic)
-        const needsRefinement =
-          aiResult.category === "context-required" ||
-          (aiResult.followUpQuestions && aiResult.followUpQuestions.length > 0);
-
-        if (needsRefinement) {
-          // Store preliminary analysis and advance to Step 2
-          setPreliminaryAnalysis(analysisResult);
-          setRequiresRefinement(true);
-          stepperState.markStepCompleted(1);
-          stepperState.goToStep(2);
-        } else {
-          // No context refinement needed, go directly to Step 3
-          setResult(analysisResult);
-          setRequiresRefinement(false);
-          stepperState.markStepCompleted(1);
-          stepperState.markStepCompleted(2);
-          stepperState.goToStep(3);
-        }
-      }
-    } catch (error: any) {
-      console.error("Image processing failed:", error);
-      alert(`Feil ved bildeprosessering: ${error.message}`);
-    } finally {
-      stopProgress();
-      setTimeout(() => {
-        setIsProcessingImage(false);
-        setOcrProgress(0);
-        setIsAnalyzing(false);
-      }, 500);
-    }
-  }, [selectedModel, compressImage, stepperState, defaultModel]);
 
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -738,25 +606,52 @@ export default function Home() {
   };
 
   const handleCheck = async () => {
-    if (text.trim().length < 5 && !imagePreview && !uploadedFile) return;
-
     setIsAnalyzing(true);
     setAiAnalysis(null);
     setResult(null); // Clear previous results
 
-    // If we have an uploaded file, analyze it with any additional text context
+    // Clean text for API
+    let analysisText = text.replace(/rairai/gi, "").trim();
+    let imageData = null;
+
+    // If we have an uploaded file, convert it to base64
     if (uploadedFile) {
-      await processFileWithContext(uploadedFile, text.trim());
-      return;
+      setOcrProgress(10);
+      try {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64Data = result.split(',')[1]; // Remove data:type;base64, prefix
+            resolve(base64Data);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(uploadedFile);
+        });
+
+        imageData = {
+          base64: base64,
+          mimeType: uploadedFile.type,
+        };
+        setOcrProgress(50);
+      } catch (error) {
+        console.error("Failed to convert image:", error);
+        setOcrProgress(0);
+      }
     }
 
-    // Clean text for API
-    const cleanedText = text.replace(/rairai/gi, "").trim();
+    // If we have OCR text and an image, use the OCR text with XML tags
+    if (imageData && ocrExtractedText) {
+      analysisText = `<ocr_extracted_text>\n${ocrExtractedText}\n</ocr_extracted_text>`;
+    } else if (!analysisText && ocrExtractedText) {
+      // If no user text but we have OCR, use OCR without XML tags (for text-only OCR)
+      analysisText = ocrExtractedText;
+    }
 
     // Check if we need web verification
-    const needsWebVerification = needsWebSearchVerification(cleanedText);
+    const needsWebVerification = needsWebSearchVerification(analysisText);
     const webReasons = needsWebVerification
-      ? getWebSearchReasons(cleanedText)
+      ? getWebSearchReasons(analysisText)
       : [];
 
     if (needsWebVerification) {
@@ -764,19 +659,29 @@ export default function Home() {
       setIsWebVerifying(true);
     }
 
-    // Try AI analysis first if text is long enough
-    if (cleanedText.length >= 5) {
-      try {
-        const modelToUse =
-          typeof selectedModel === "string" ? selectedModel : defaultModel;
+    // Set progress for images
+    if (imageData) {
+      setOcrProgress(70);
+    }
 
-        // Prepare context object for URLs with additional context
-        const contextData =
-          urlDetected && additionalContext.trim()
-            ? {
-                additionalContext: additionalContext.trim(),
-              }
-            : undefined;
+    // Try AI analysis if we have sufficient text OR an image
+    if (analysisText.length >= 5 || imageData) {
+      try {
+        const baseModel = typeof selectedModel === "string" ? selectedModel : defaultModel;
+        const modelToUse = needsWebVerification ? `${baseModel}:online` : baseModel;
+
+        // Prepare context object
+        const contextData: any = {};
+
+        // Add image data if available
+        if (imageData) {
+          contextData.imageData = imageData;
+        }
+
+        // Add additional context for URLs
+        if (urlDetected && additionalContext.trim()) {
+          contextData.additionalContext = additionalContext.trim();
+        }
 
         const response = await fetch("/api/analyze", {
           method: "POST",
@@ -784,9 +689,9 @@ export default function Home() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            text: cleanedText,
+            text: analysisText,
             model: modelToUse,
-            context: contextData,
+            context: Object.keys(contextData).length > 0 ? contextData : undefined,
           }),
         });
 
@@ -826,6 +731,11 @@ export default function Home() {
         } else {
           const aiResult = await response.json();
           setAiAnalysis(aiResult);
+
+          // Complete progress for images
+          if (imageData) {
+            setOcrProgress(100);
+          }
 
           // Use AI-based risk assessment with categories
           const analysisResult = {
@@ -902,6 +812,7 @@ export default function Home() {
 
     setIsAnalyzing(false);
     setIsWebVerifying(false);
+    setOcrProgress(0);
   };
 
   // Reset all states for new analysis
@@ -911,6 +822,8 @@ export default function Home() {
     setAiAnalysis(null);
     setImagePreview(null);
     setOcrProgress(0);
+    setOcrExtractedText("");
+    setUploadedFile(null);
     setUrlDetected(false);
     setAdditionalContext("");
     setIsWebVerifying(false);
@@ -939,6 +852,12 @@ export default function Home() {
     // Clean text for API
     const cleanedText = text.replace(/rairai/gi, "").trim();
 
+    // Prepare text with OCR context if available
+    let refinedText = cleanedText;
+    if (ocrExtractedText) {
+      refinedText = `<ocr_extracted_text>\n${ocrExtractedText}\n</ocr_extracted_text>\n\nUser provided context: ${cleanedText}`;
+    }
+
     try {
       const modelToUse =
         typeof selectedModel === "string" ? selectedModel : defaultModel;
@@ -949,18 +868,53 @@ export default function Home() {
         combinedContext = `Kontekst for lenke: ${additionalContext.trim()}\n\nYtterligere informasjon: ${refinementContext}`;
       }
 
+      // Prepare context with image, OCR, and initial results
+      const contextData: any = {
+        questionAnswers,
+        additionalContext: combinedContext,
+        // Include the preliminary analysis results
+        initialAnalysis: preliminaryAnalysis ? {
+          category: preliminaryAnalysis.category,
+          score: preliminaryAnalysis.score,
+          risk: preliminaryAnalysis.risk,
+          triggers: preliminaryAnalysis.triggers,
+          recommendation: preliminaryAnalysis.recommendation,
+          summary: preliminaryAnalysis.summary,
+          mainIndicators: aiAnalysis?.mainIndicators,
+          positiveIndicators: aiAnalysis?.positiveIndicators,
+          negativeIndicators: aiAnalysis?.negativeIndicators,
+          urlVerifications: aiAnalysis?.urlVerifications,
+        } : undefined,
+      };
+
+      // Include image if we have one from step 1
+      if (uploadedFile) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64Data = result.split(',')[1]; // Remove data:type;base64, prefix
+            resolve(base64Data);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(uploadedFile);
+        });
+
+        contextData.imageData = {
+          base64: base64,
+          mimeType: uploadedFile.type,
+        };
+      }
+
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          text: cleanedText,
+          text: refinedText,
           model: modelToUse,
-          context: {
-            questionAnswers,
-            additionalContext: combinedContext,
-          },
+          context: contextData,
         }),
       });
 
@@ -1544,6 +1498,7 @@ export default function Home() {
               result={result}
               aiAnalysis={aiAnalysis}
               onNewAnalysis={handleNewAnalysis}
+              originalText={text}
             />
           </div>
         )}

@@ -11,6 +11,7 @@ import {
   Badge,
   Icon
 } from '@dnb/eufemia';
+import URLStatusCard from './URLStatusCard';
 
 interface AnalysisResult {
   score: number;
@@ -18,6 +19,13 @@ interface AnalysisResult {
   triggers: string[];
   explanation: string;
   recommendation: string;
+}
+
+interface URLVerification {
+  url: string;
+  status: 'legitimate' | 'suspicious' | 'unknown' | 'verified_scam';
+  verificationDetails: string;
+  sources: string[];
 }
 
 interface AIAnalysisResult {
@@ -32,12 +40,21 @@ interface AIAnalysisResult {
   mainIndicators?: string[];
   positiveIndicators?: string[];
   negativeIndicators?: string[];
+  category?: 'fraud' | 'marketing' | 'suspicious' | 'context-required' | 'safe';
+  urlVerifications: URLVerification[];
+  educationalContext?: {
+    whyThisAssessment: string;
+    commonLegitimateUse: string;
+    keyDifference: string;
+  };
   verificationGuide?: {
     primaryCheck: string;
     independentVerification: string;
     alternativeChannel: string;
   };
   actionableSteps?: string[];
+  webSearchUsed?: boolean;
+  webSearchReasons?: string[];
 }
 
 interface ResultsStepProps {
@@ -45,13 +62,15 @@ interface ResultsStepProps {
   result: AnalysisResult | null;
   aiAnalysis: AIAnalysisResult | null;
   onNewAnalysis: () => void;
+  originalText?: string;
 }
 
 export default function ResultsStep({
   isAnalyzing,
   result,
   aiAnalysis,
-  onNewAnalysis
+  onNewAnalysis,
+  originalText = ''
 }: ResultsStepProps) {
   if (isAnalyzing) {
     return (
@@ -332,6 +351,212 @@ export default function ResultsStep({
         </div>
       </div>
 
+      {/* URL STATUS CARD */}
+      {originalText && (
+        <URLStatusCard
+          text={originalText}
+          positiveIndicators={aiAnalysis?.positiveIndicators || []}
+          negativeIndicators={aiAnalysis?.negativeIndicators || []}
+          category={aiAnalysis?.category}
+          webSearchUsed={aiAnalysis?.webSearchUsed}
+          webSearchReasons={aiAnalysis?.webSearchReasons}
+          urlVerifications={aiAnalysis?.urlVerifications || []}
+        />
+      )}
+
+      {/* POSITIVE/NEGATIVE INDICATORS */}
+      {(aiAnalysis?.positiveIndicators?.length || aiAnalysis?.negativeIndicators?.length) && (
+        <Card spacing="medium" style={{ marginBottom: 'clamp(1rem, 4vw, 2.5rem)' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'clamp(0.5rem, 2vw, 0.75rem)',
+            marginBottom: 'clamp(1rem, 3vw, 1.5rem)'
+          }}>
+            <Icon name="exclamation" size="medium" style={{ color: 'var(--color-sea-green)' }} />
+            <Heading size="medium" level="2" style={{
+              margin: 0,
+              fontSize: 'clamp(1.125rem, 4vw, 1.5rem)'
+            }}>
+              Funn i analysen
+            </Heading>
+          </div>
+
+          <div style={{ display: 'grid', gap: 'clamp(0.75rem, 2vw, 1rem)' }}>
+            {/* Positive Indicators */}
+            {aiAnalysis?.positiveIndicators?.map((indicator, index) => (
+              <div
+                key={`positive-${index}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 'clamp(0.75rem, 2vw, 1rem)',
+                  padding: 'clamp(0.75rem, 2vw, 1rem)',
+                  backgroundColor: '#D1FAE5',
+                  borderRadius: '0.75rem',
+                  border: '2px solid #10B981'
+                }}
+              >
+                <div style={{
+                  backgroundColor: '#10B981',
+                  borderRadius: '50%',
+                  padding: 'clamp(0.375rem, 1vw, 0.5rem)',
+                  flexShrink: 0
+                }}>
+                  <Icon name="check" size="small" style={{ color: 'white' }} />
+                </div>
+                <P size="medium" style={{
+                  margin: 0,
+                  color: '#065F46',
+                  fontWeight: 500,
+                  lineHeight: 1.5,
+                  fontSize: 'clamp(0.875rem, 3vw, 1rem)'
+                }}>
+                  {indicator}
+                </P>
+              </div>
+            ))}
+
+            {/* Negative Indicators */}
+            {aiAnalysis?.negativeIndicators?.map((indicator, index) => (
+              <div
+                key={`negative-${index}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 'clamp(0.75rem, 2vw, 1rem)',
+                  padding: 'clamp(0.75rem, 2vw, 1rem)',
+                  backgroundColor: '#FEE2E2',
+                  borderRadius: '0.75rem',
+                  border: '2px solid #DC2626'
+                }}
+              >
+                <div style={{
+                  backgroundColor: '#DC2626',
+                  borderRadius: '50%',
+                  padding: 'clamp(0.375rem, 1vw, 0.5rem)',
+                  flexShrink: 0
+                }}>
+                  <Icon name="close" size="small" style={{ color: 'white' }} />
+                </div>
+                <P size="medium" style={{
+                  margin: 0,
+                  color: '#991B1B',
+                  fontWeight: 500,
+                  lineHeight: 1.5,
+                  fontSize: 'clamp(0.875rem, 3vw, 1rem)'
+                }}>
+                  {indicator}
+                </P>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* VIKTIG Å VITE - EDUCATIONAL CONTEXT */}
+      {aiAnalysis?.educationalContext && (
+        <Card spacing="large" style={{
+          marginBottom: 'clamp(1rem, 4vw, 2.5rem)',
+          border: '3px solid var(--color-mint-green)',
+          borderLeft: '8px solid var(--color-sea-green)',
+          backgroundColor: 'var(--color-mint-green-8)'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'clamp(0.5rem, 2vw, 0.75rem)',
+            marginBottom: 'clamp(1rem, 3vw, 1.5rem)'
+          }}>
+            <div style={{
+              backgroundColor: 'var(--color-sea-green)',
+              borderRadius: '50%',
+              padding: 'clamp(0.5rem, 2vw, 0.75rem)'
+            }}>
+              <Icon name="information" size="medium" style={{ color: 'white' }} />
+            </div>
+            <Heading size="large" level="2" style={{
+              margin: 0,
+              color: 'var(--color-sea-green)',
+              fontSize: 'clamp(1.25rem, 4vw, 1.75rem)'
+            }}>
+              📚 Viktig å vite
+            </Heading>
+          </div>
+
+          <div style={{ display: 'grid', gap: 'clamp(1rem, 3vw, 1.5rem)' }}>
+            {/* Why This Assessment */}
+            <div style={{
+              padding: 'clamp(1rem, 3vw, 1.25rem)',
+              backgroundColor: 'white',
+              borderRadius: '0.75rem',
+              border: '2px solid var(--color-sea-green-30)'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'clamp(0.5rem, 2vw, 0.75rem)',
+                marginBottom: 'clamp(0.5rem, 2vw, 0.75rem)'
+              }}>
+                <Icon name="question" size="small" style={{ color: 'var(--color-sea-green)' }} />
+                <Heading size="medium" level="3" style={{ margin: 0, color: 'var(--color-sea-green)' }}>
+                  Hvorfor denne vurderingen?
+                </Heading>
+              </div>
+              <P style={{ margin: 0, color: 'var(--color-black-80)', lineHeight: 1.6 }}>
+                {aiAnalysis.educationalContext.whyThisAssessment}
+              </P>
+            </div>
+
+            {/* Legitimate Use */}
+            <div style={{
+              padding: 'clamp(1rem, 3vw, 1.25rem)',
+              backgroundColor: 'white',
+              borderRadius: '0.75rem',
+              border: '2px solid var(--color-sea-green-30)'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'clamp(0.5rem, 2vw, 0.75rem)',
+                marginBottom: 'clamp(0.5rem, 2vw, 0.75rem)'
+              }}>
+                <Icon name="check_circle" size="small" style={{ color: 'var(--color-summer-green)' }} />
+                <Heading size="medium" level="3" style={{ margin: 0, color: 'var(--color-summer-green)' }}>
+                  Legitim bruk
+                </Heading>
+              </div>
+              <P style={{ margin: 0, color: 'var(--color-black-80)', lineHeight: 1.6 }}>
+                {aiAnalysis.educationalContext.commonLegitimateUse}
+              </P>
+            </div>
+
+            {/* Key Difference */}
+            <div style={{
+              padding: 'clamp(1rem, 3vw, 1.25rem)',
+              backgroundColor: 'white',
+              borderRadius: '0.75rem',
+              border: '2px solid var(--color-sea-green-30)'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'clamp(0.5rem, 2vw, 0.75rem)',
+                marginBottom: 'clamp(0.5rem, 2vw, 0.75rem)'
+              }}>
+                <Icon name="warning" size="small" style={{ color: 'var(--color-signal-orange)' }} />
+                <Heading size="medium" level="3" style={{ margin: 0, color: 'var(--color-signal-orange)' }}>
+                  Viktig forskjell
+                </Heading>
+              </div>
+              <P style={{ margin: 0, color: 'var(--color-black-80)', lineHeight: 1.6 }}>
+                {aiAnalysis.educationalContext.keyDifference}
+              </P>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* KEY INDICATORS */}
       {mainIndicators.length > 0 && (
         <Card spacing="medium" style={{ marginBottom: 'clamp(1rem, 4vw, 2.5rem)' }}>
@@ -484,84 +709,6 @@ export default function ResultsStep({
         </Card>
       )}
 
-      {/* VERIFICATION GUIDE */}
-      {verificationGuide && (
-        <Card spacing="large" style={{ marginBottom: '2.5rem' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            marginBottom: '1.5rem'
-          }}>
-            <Icon name="shield" size="medium" style={{ color: 'var(--color-sea-green)' }} />
-            <Heading size="large" level="2" style={{ margin: 0 }}>
-              Slik kan du verifisere
-            </Heading>
-          </div>
-
-          <div style={{ display: 'grid', gap: '1.25rem' }}>
-            <div style={{
-              padding: '1.25rem',
-              backgroundColor: '#DBEAFE',
-              borderRadius: '0.75rem',
-              border: '2px solid #3B82F6'
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                marginBottom: '0.75rem'
-              }}>
-                <Icon name="search" size="small" style={{ color: '#1E40AF' }} />
-                <Heading size="medium" level="3" style={{ margin: 0, color: '#1E40AF' }}>
-                  Primær sjekk
-                </Heading>
-              </div>
-              <P style={{ margin: 0, color: '#1E40AF' }}>{verificationGuide.primaryCheck}</P>
-            </div>
-
-            <div style={{
-              padding: '1.25rem',
-              backgroundColor: '#FEF3C7',
-              borderRadius: '0.75rem',
-              border: '2px solid #F59E0B'
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                marginBottom: '0.75rem'
-              }}>
-                <Icon name="warning" size="small" style={{ color: '#92400E' }} />
-                <Heading size="medium" level="3" style={{ margin: 0, color: '#92400E' }}>
-                  Uavhengig verifisering
-                </Heading>
-              </div>
-              <P style={{ margin: 0, color: '#92400E' }}>{verificationGuide.independentVerification}</P>
-            </div>
-
-            <div style={{
-              padding: '1.25rem',
-              backgroundColor: '#D1FAE5',
-              borderRadius: '0.75rem',
-              border: '2px solid #10B981'
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                marginBottom: '0.75rem'
-              }}>
-                <Icon name="phone" size="small" style={{ color: '#065F46' }} />
-                <Heading size="medium" level="3" style={{ margin: 0, color: '#065F46' }}>
-                  Alternativ kanal
-                </Heading>
-              </div>
-              <P style={{ margin: 0, color: '#065F46' }}>{verificationGuide.alternativeChannel}</P>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {/* CTA SECTION */}
       <div style={{

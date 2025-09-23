@@ -1,40 +1,102 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { parseFraudAnalysis } from '@/lib/utils/jsonParser';
-import { isMinimalContextURL } from '@/lib/urlAnalyzer';
-import { needsWebSearchVerification, getWebSearchReasons } from '@/lib/fraudDetection';
-import { fraudAnalysisSchema, supportsStructuredOutput, supportsNativeJSONSchema, type FraudAnalysisResponse } from '@/lib/schemas/fraudAnalysis';
+import { NextRequest, NextResponse } from "next/server";
+import { parseFraudAnalysis } from "@/lib/utils/jsonParser";
+import { isMinimalContextURL } from "@/lib/urlAnalyzer";
+import {
+  needsWebSearchVerification,
+  getWebSearchReasons,
+} from "@/lib/fraudDetection";
+import {
+  fraudAnalysisSchema,
+  supportsStructuredOutput,
+  supportsNativeJSONSchema,
+  type FraudAnalysisResponse,
+} from "@/lib/schemas/fraudAnalysis";
 
 // Helper function to get basic model info from ID
 function getModelInfo(modelId: string) {
-  const provider = modelId.split('/')[0] || 'unknown';
-  const modelName = modelId.split('/')[1] || modelId;
+  const provider = modelId.split("/")[0] || "unknown";
+  const modelName = modelId.split("/")[1] || modelId;
 
   return {
     name: modelName,
     provider: provider,
     supportsStructuredOutput: supportsStructuredOutput(modelId),
-    supportsNativeJSONSchema: supportsNativeJSONSchema(modelId)
+    supportsNativeJSONSchema: supportsNativeJSONSchema(modelId),
   };
 }
 
-const createEnhancedFraudPrompt = (text: string, context?: { questionAnswers?: Record<string, 'yes' | 'no'>, additionalContext?: string }, hasMinimalContext: boolean = false, enableWebSearch: boolean = false): string => {
-  const currentDate = new Date().toLocaleDateString('no-NO', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
+const createEnhancedFraudPrompt = (
+  text: string,
+  context?: {
+    questionAnswers?: Record<string, "yes" | "no">;
+    additionalContext?: string;
+    initialAnalysis?: {
+      category: string;
+      score: number;
+      risk: string;
+      triggers: any[];
+      recommendation: string;
+      summary: string;
+      mainIndicators?: string[];
+      positiveIndicators?: string[];
+      negativeIndicators?: string[];
+      urlVerifications?: any[];
+    };
+  },
+  hasMinimalContext: boolean = false,
+  enableWebSearch: boolean = false,
+): string => {
+  const currentDate = new Date().toLocaleDateString("no-NO", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
 
-  const contextSection = context && (Object.keys(context.questionAnswers || {}).length > 0 || context.additionalContext?.trim()) ? `
+  const contextSection =
+    context &&
+    (Object.keys(context.questionAnswers || {}).length > 0 ||
+      context.additionalContext?.trim() ||
+      context.initialAnalysis)
+      ? `
 <user_context>
-${context.questionAnswers && Object.keys(context.questionAnswers).length > 0 ? `
+${
+  context.initialAnalysis
+    ? `
+<initial_analysis>
+Category: ${context.initialAnalysis.category}
+Risk Level: ${context.initialAnalysis.risk}
+Fraud Probability: ${context.initialAnalysis.score}%
+${context.initialAnalysis.mainIndicators?.length ? `Main Indicators Found: ${context.initialAnalysis.mainIndicators.join(', ')}` : ''}
+${context.initialAnalysis.positiveIndicators?.length ? `Positive Indicators: ${context.initialAnalysis.positiveIndicators.join(', ')}` : ''}
+${context.initialAnalysis.negativeIndicators?.length ? `Negative Indicators: ${context.initialAnalysis.negativeIndicators.join(', ')}` : ''}
+Initial Recommendation: ${context.initialAnalysis.recommendation}
+${context.initialAnalysis.urlVerifications?.length ? `URL Verifications: ${JSON.stringify(context.initialAnalysis.urlVerifications)}` : ''}
+</initial_analysis>`
+    : ""
+}
+${
+  context.questionAnswers && Object.keys(context.questionAnswers).length > 0
+    ? `
 <answered_questions>
-${Object.entries(context.questionAnswers).map(([question, answer]) => `- ${question}: ${answer.toUpperCase() === 'yes' ? 'JA' : 'NEI'}`).join('\n')}
-</answered_questions>` : ''}
-${context.additionalContext?.trim() ? `
+${Object.entries(context.questionAnswers)
+  .map(
+    ([question, answer]) =>
+      `- ${question}: ${answer.toUpperCase() === "yes" ? "JA" : "NEI"}`,
+  )
+  .join("\n")}
+</answered_questions>`
+    : ""
+}
+${
+  context.additionalContext?.trim()
+    ? `
 <additional_info>
 ${context.additionalContext.trim()}
-</additional_info>` : ''}
-</user_context>` : '';
+</additional_info>`
+    : ""
+}
+</user_context>`
+      : "";
 
   const basePrompt = `<context>
 Role: Svindeldeteksjonsekspert for DNB Bank Norge
@@ -111,7 +173,9 @@ When websites appear with minimal context:
 REMEMBER: Context matters more than URL legitimacy - legitimate sites can be used in social engineering
 </critical_rule>
 
-${enableWebSearch ? `
+${
+  enableWebSearch
+    ? `
 <web_search_instructions>
 IMPORTANT: You have access to web search. Use it to verify suspicious content against Norwegian fraud databases:
 
@@ -155,7 +219,64 @@ SEARCH STRATEGY:
 5. Prioritize Norwegian (.no) sources as most relevant
 
 Include your search findings in the risk assessment!
-</web_search_instructions>` : ''}
+
+CRITICAL: When URLs are found in the content, you MUST populate the urlVerifications array with detailed findings:
+- For each URL, perform web search to verify legitimacy
+- Set status: "legitimate" (verified safe), "suspicious" (questionable), "unknown" (no clear info), "verified_scam" (confirmed fraud)
+- Include specific verificationDetails: e.g., "Etablert norsk kleskjede siden 2012, verifisert via offisiell nettside og Brønnøysundregistrene"
+- List sources: e.g., ["Trustpilot", "Brønnøysundregistrene", "Offisiell nettside"]
+- This data will be used to display detailed URL verification to users
+</web_search_instructions>`
+    : ""
+}
+
+<url_extraction_and_verification>
+MANDATORY URL PROCESSING - APPLY TO ALL CONTENT TYPES:
+
+1. EXTRACT ALL URLS FROM ANY SOURCE:
+   - Scan ALL content for URLs (web addresses, links, domains)
+   - Check text input, OCR-extracted text, and visual content in images
+   - Find URLs even if they are:
+     * Partially visible or truncated
+     * Split across lines
+     * Displayed in images as text
+     * Mentioned in any context (suspicious or legitimate)
+     * Hidden in <ocr_extracted_text> tags
+
+2. IDENTIFY URL PATTERNS:
+   - Complete URLs: https://example.com, http://site.no
+   - Domain names without protocol: example.com, shop.no
+   - Subdomains: login.bank.no, secure.payment.com
+   - URL shorteners: bit.ly/abc123, tinyurl.com/xyz
+   - Suspicious patterns: IP addresses, unusual TLDs (.tk, .ml, .ga)
+
+3. VERIFY EVERY FOUND URL:
+   - For EACH URL found, you MUST populate urlVerifications array
+   - Use web search (:online suffix) to verify each URL
+   - Even if you cannot verify, include the URL with status "unknown"
+   - Search patterns:
+     * "[domain] site:trustpilot.no" (customer reviews)
+     * "[domain] svindel" (fraud warnings)
+     * "[domain] site:forbrukertilsynet.no" (consumer authority)
+     * "[company name] offisiell nettside" (official verification)
+
+4. MANDATORY URL VERIFICATION RESPONSE:
+   - Every detected URL MUST appear in urlVerifications array
+   - Required fields for each URL:
+     * url: The exact URL found
+     * status: "legitimate", "suspicious", "unknown", "verified_scam"
+     * verificationDetails: Specific findings from web search
+     * sources: List of verification sources used
+   - If no URLs found, urlVerifications should be empty array []
+
+5. SPECIAL CASES:
+   - OCR text: URLs extracted from images are often suspicious
+   - Image content: Look for URLs displayed visually in screenshots
+   - Phishing: Pay attention to lookalike domains (bank.no vs bank-no.com)
+   - Social engineering: Legitimate sites used in suspicious contexts
+
+CRITICAL: URL extraction is MANDATORY, not optional. Always populate urlVerifications array.
+</url_extraction_and_verification>
 
 <web_search_override_rule>
 ABSOLUTE PRIORITY: If web search finds:
@@ -338,12 +459,16 @@ For pakkemelding:
 ${text}
 </input_text>
 
-${hasMinimalContext ? `
+${
+  hasMinimalContext
+    ? `
 <context_warning>
 USER PROVIDED MINIMAL CONTEXT - Apply extra scrutiny
 This appears to be a URL or content with little explanation
 Default to higher suspicion levels per Minimal_Context_URL_Analysis rule
-</context_warning>` : ''}
+</context_warning>`
+    : ""
+}
 
 ${contextSection}
 
@@ -446,8 +571,37 @@ const supportsJSON = (model: string) => {
 };
 
 // Helper function to call OpenRouter API with a specific model
-async function callOpenRouterAPI(model: string, text: string, apiKey: string, context?: { questionAnswers?: Record<string, 'yes' | 'no'>, additionalContext?: string, imageData?: { base64: string, mimeType: string }, additionalText?: string }, hasMinimalContext: boolean = false, enableWebSearch: boolean = false) {
-  const prompt = createEnhancedFraudPrompt(text, context, hasMinimalContext, enableWebSearch);
+async function callOpenRouterAPI(
+  model: string,
+  text: string,
+  apiKey: string,
+  context?: {
+    questionAnswers?: Record<string, "yes" | "no">;
+    additionalContext?: string;
+    imageData?: { base64: string; mimeType: string };
+    additionalText?: string;
+    initialAnalysis?: {
+      category: string;
+      score: number;
+      risk: string;
+      triggers: any[];
+      recommendation: string;
+      summary: string;
+      mainIndicators?: string[];
+      positiveIndicators?: string[];
+      negativeIndicators?: string[];
+      urlVerifications?: any[];
+    };
+  },
+  hasMinimalContext: boolean = false,
+  enableWebSearch: boolean = false,
+) {
+  const prompt = createEnhancedFraudPrompt(
+    text,
+    context,
+    hasMinimalContext,
+    enableWebSearch,
+  );
 
   // Modify model name for web search
   const searchModel = enableWebSearch ? `${model}:online` : model;
@@ -456,27 +610,31 @@ async function callOpenRouterAPI(model: string, text: string, apiKey: string, co
   let userMessage: any;
 
   if (context?.imageData) {
-    // Vision model request with image
+    // Vision model request with image and text (OCR or additional text)
+    const imagePromptText = text && text.trim()
+      ? `${text}\n\nLet på bildet og EXTRACT alle URLs/lenker som er synlige i bildet. Dette inkluderer tekst på skjermen, lenker i meldinger, eller adresser som vises visuelt. Verify alle URLer du finner.\n\n${prompt}`
+      : `Analyser dette bildet for tegn på svindel. MANDATORY: Extract alle URLs/lenker som er synlige i bildet - dette inkluderer tekst på skjermen, meldinger, eller adresser som vises visuelt. Verify alle URLer du finner gjennom web search.\n\n${prompt}`;
+
     userMessage = {
-      role: 'user',
+      role: "user",
       content: [
         {
-          type: 'text',
-          text: `Analyser dette bildet for tegn på svindel. ${context.additionalText ? `Tilleggsinformasjon: ${context.additionalText}` : ''}\n\n${prompt}`
+          type: "text",
+          text: imagePromptText,
         },
         {
-          type: 'image_url',
+          type: "image_url",
           image_url: {
-            url: `data:${context.imageData.mimeType};base64,${context.imageData.base64}`
-          }
-        }
-      ]
+            url: `data:${context.imageData.mimeType};base64,${context.imageData.base64}`,
+          },
+        },
+      ],
     };
   } else {
     // Text-only request
     userMessage = {
-      role: 'user',
-      content: prompt
+      role: "user",
+      content: `${text}\n\n${prompt}`,
     };
   }
 
@@ -484,45 +642,51 @@ async function callOpenRouterAPI(model: string, text: string, apiKey: string, co
     model: searchModel,
     messages: [userMessage],
     temperature: 0, // Use 0 for consistent structured output
-    max_tokens: 1000 // Increase for more detailed structured responses
+    max_tokens: 1000, // Increase for more detailed structured responses
   };
 
   // Add web search plugin if enabled
   if (enableWebSearch) {
-    requestBody.plugins = [{
-      id: "web",
-      max_results: 5,
-      engine: "exa"  // Use Exa search engine as fallback for models without native support
-    }];
+    requestBody.plugins = [
+      {
+        id: "web",
+        max_results: 5,
+        engine: "exa", // Use Exa search engine as fallback for models without native support
+      },
+    ];
   }
 
   // Add structured output support - prefer native JSON schema when available
   if (supportsNativeJSONSchema(model)) {
     // Use native JSON schema for OpenAI models (most reliable)
     requestBody.response_format = {
-      type: 'json_schema',
-      json_schema: fraudAnalysisSchema
+      type: "json_schema",
+      json_schema: fraudAnalysisSchema,
     };
   } else if (supportsJSON(model)) {
     // Fallback to basic JSON object format for other compatible models
-    requestBody.response_format = { type: 'json_object' };
+    requestBody.response_format = { type: "json_object" };
   }
 
   // Add GPT-5 specific parameters if applicable
-  if (model.includes('gpt-5')) {
-    requestBody.reasoning_effort = 'medium'; // GPT-5 specific parameter
+  if (model.includes("gpt-5")) {
+    requestBody.reasoning_effort = "medium"; // GPT-5 specific parameter
   }
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://localhost:3000',
-      'X-Title': 'DNB Svindelsjekk'
+  const response = await fetch(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer":
+          process.env.NEXT_PUBLIC_APP_URL || "https://localhost:3000",
+        "X-Title": "DNB Svindelsjekk",
+      },
+      body: JSON.stringify(requestBody),
     },
-    body: JSON.stringify(requestBody)
-  });
+  );
 
   if (!response.ok) {
     const error = await response.text();
@@ -541,8 +705,8 @@ async function callOpenRouterAPI(model: string, text: string, apiKey: string, co
 
 export async function POST(request: NextRequest) {
   try {
-    const defaultModel = process.env.DEFAULT_AI_MODEL || 'openai/gpt-4o-mini';
-    const backupModel = process.env.BACKUP_AI_MODEL || 'openai/gpt-4o-mini';
+    const defaultModel = process.env.DEFAULT_AI_MODEL || "openai/gpt-4o-mini";
+    const backupModel = process.env.BACKUP_AI_MODEL || "openai/gpt-4o-mini";
 
     let text: string;
     let model = defaultModel;
@@ -550,40 +714,41 @@ export async function POST(request: NextRequest) {
     let ocrUsed = false;
 
     // Check if this is a FormData request (image upload) or JSON request (text)
-    const contentType = request.headers.get('content-type') || '';
+    const contentType = request.headers.get("content-type") || "";
 
-    if (contentType.includes('multipart/form-data')) {
+    if (contentType.includes("multipart/form-data")) {
       // Handle image upload with FormData
       const formData = await request.formData();
-      const imageFile = formData.get('image') as File;
-      const additionalText = formData.get('text') as string;
-      const modelParam = formData.get('model') as string;
+      const imageFile = formData.get("image") as File;
+      const additionalText = formData.get("text") as string;
+      const modelParam = formData.get("model") as string;
 
       if (modelParam) model = modelParam;
 
       if (!imageFile) {
         return NextResponse.json(
-          { error: 'No image file provided' },
-          { status: 400 }
+          { error: "No image file provided" },
+          { status: 400 },
         );
       }
 
       // Convert image to base64 for AI model
       const arrayBuffer = await imageFile.arrayBuffer();
-      const base64Image = Buffer.from(arrayBuffer).toString('base64');
-      const mimeType = imageFile.type || 'image/jpeg';
+      const base64Image = Buffer.from(arrayBuffer).toString("base64");
+      const mimeType = imageFile.type || "image/jpeg";
 
       // Store image data for AI analysis
       context = {
         imageData: {
           base64: base64Image,
-          mimeType: mimeType
+          mimeType: mimeType,
         },
-        additionalText: additionalText?.trim() || ''
+        additionalText: additionalText?.trim() || "",
       };
 
       // Use a placeholder text that will trigger vision analysis
-      text = `Analyser dette bildet for svindel. ${additionalText || ''}`.trim();
+      text =
+        `Analyser dette bildet for svindel. MANDATORY: Extract alle URLs/lenker som er synlige i bildet og verify dem gjennom web search. ${additionalText || ""}`.trim();
       ocrUsed = false; // We're using vision, not OCR
     } else {
       // Handle standard JSON request
@@ -592,12 +757,8 @@ export async function POST(request: NextRequest) {
       model = body.model || defaultModel;
       context = body.context;
 
-      // Handle image data in JSON requests (unified approach)
-      if (context?.imageData && (!text || text.trim().length === 0)) {
-        // For image-only analysis, create appropriate text like FormData approach
-        const additionalText = context.additionalText || '';
-        text = `Analyser dette bildet for svindel. ${additionalText}`.trim();
-      }
+      // Handle unified flow - text can contain OCR content wrapped in XML tags
+      // No need to modify text here as it comes properly formatted from the frontend
     }
 
     // Detect if this is a minimal context URL
@@ -607,27 +768,30 @@ export async function POST(request: NextRequest) {
     const needsWebSearch = needsWebSearchVerification(text);
     const webSearchReasons = needsWebSearch ? getWebSearchReasons(text) : [];
 
-    console.log('Analysis flags:', {
+    console.log("Analysis flags:", {
       hasMinimalContext,
       needsWebSearch,
-      webSearchReasons
+      webSearchReasons,
     });
 
-    // Validate extracted text
-    if (!text || text.trim().length < 5) {
+    // Validate that we have some content for analysis (text OR image)
+    if ((!text || text.trim().length === 0) && !context?.imageData) {
       return NextResponse.json(
-        { error: 'Text too short for analysis. Please provide more content or a clearer image.' },
-        { status: 400 }
+        {
+          error:
+            "No content provided for analysis.",
+        },
+        { status: 400 },
       );
     }
 
     // Check for API key
     const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey || apiKey === 'your_openrouter_api_key_here') {
-      console.error('OpenRouter API key not configured');
+    if (!apiKey || apiKey === "your_openrouter_api_key_here") {
+      console.error("OpenRouter API key not configured");
       return NextResponse.json(
-        { error: 'AI-tjenesten er ikke konfigurert. Kontakt administrator.' },
-        { status: 503 }
+        { error: "AI-tjenesten er ikke konfigurert. Kontakt administrator." },
+        { status: 503 },
       );
     }
 
@@ -636,21 +800,29 @@ export async function POST(request: NextRequest) {
 
     // Direct API call with no fallbacks - require structured output
     try {
-      const content = await callOpenRouterAPI(selectedModel, text, apiKey, context, hasMinimalContext, needsWebSearch);
+      const content = await callOpenRouterAPI(
+        selectedModel,
+        text,
+        apiKey,
+        context,
+        hasMinimalContext,
+        needsWebSearch,
+      );
       const parseResult = parseFraudAnalysis(content);
 
       if (!parseResult.success) {
-        console.error('Failed to parse structured output:', parseResult.error);
-        console.error('Raw response:', parseResult.originalContent);
+        console.error("Failed to parse structured output:", parseResult.error);
+        console.error("Raw response:", parseResult.originalContent);
 
         return NextResponse.json(
           {
-            error: 'AI modell returnerte ikke gyldig strukturert output',
+            error: "AI modell returnerte ikke gyldig strukturert output",
             details: `Modell: ${selectedModel}`,
             parseError: parseResult.error,
-            message: 'Denne modellen støtter ikke strukturert output eller er feilkonfigurert'
+            message:
+              "Denne modellen støtter ikke strukturert output eller er feilkonfigurert",
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
@@ -663,73 +835,75 @@ export async function POST(request: NextRequest) {
         ...(needsWebSearch && {
           webSearchUsed: true,
           webSearchReasons: webSearchReasons,
-          enhancedVerification: true
+          enhancedVerification: true,
         }),
         ...(supportsNativeJSONSchema(selectedModel) && {
           structuredOutputUsed: true,
-          schemaType: 'native_json_schema'
+          schemaType: "native_json_schema",
         }),
-        ...(supportsStructuredOutput(selectedModel) && !supportsNativeJSONSchema(selectedModel) && {
-          structuredOutputUsed: true,
-          schemaType: 'json_object'
-        }),
+        ...(supportsStructuredOutput(selectedModel) &&
+          !supportsNativeJSONSchema(selectedModel) && {
+            structuredOutputUsed: true,
+            schemaType: "json_object",
+          }),
         ...(context?.imageData && {
           visionProcessed: true,
           imageProcessed: true,
-          imageAnalyzed: true
-        })
+          imageAnalyzed: true,
+        }),
       };
 
       return NextResponse.json(aiAnalysis);
-
     } catch (error) {
-      console.error('API call failed:', error);
+      console.error("API call failed:", error);
 
       // Handle specific API errors
-      if (error instanceof Error && error.message.includes('Rate limit')) {
+      if (error instanceof Error && error.message.includes("Rate limit")) {
         return NextResponse.json(
           {
-            error: 'Rate limit exceeded',
-            message: 'Too many requests. Please wait a minute before trying again.',
-            retryAfter: 60
+            error: "Rate limit exceeded",
+            message:
+              "Too many requests. Please wait a minute before trying again.",
+            retryAfter: 60,
           },
-          { status: 429 }
+          { status: 429 },
         );
       }
 
       return NextResponse.json(
         {
-          error: 'AI-tjenesten er ikke tilgjengelig',
+          error: "AI-tjenesten er ikke tilgjengelig",
           details: `Modell: ${selectedModel}`,
-          apiError: error instanceof Error ? error.message : 'Unknown error'
+          apiError: error instanceof Error ? error.message : "Unknown error",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
-
   } catch (error: any) {
-    console.error('Error in analyze:', error);
-    
+    console.error("Error in analyze:", error);
+
     return NextResponse.json(
-      { error: `AI-analyse feilet: ${error.message || 'Ukjent feil'}` },
-      { status: 500 }
+      { error: `AI-analyse feilet: ${error.message || "Ukjent feil"}` },
+      { status: 500 },
     );
   }
 }
 
 // GET endpoint to check available models
 export async function GET() {
-  const defaultModel = process.env.DEFAULT_AI_MODEL || 'openai/gpt-4o-mini';
+  const defaultModel = process.env.DEFAULT_AI_MODEL || "openai/gpt-4o-mini";
 
   return NextResponse.json({
     defaultModel: defaultModel,
     defaultModelInfo: getModelInfo(defaultModel),
-    status: 'ready',
-    apiKeyConfigured: !!process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== 'your_openrouter_api_key_here',
+    status: "ready",
+    apiKeyConfigured:
+      !!process.env.OPENROUTER_API_KEY &&
+      process.env.OPENROUTER_API_KEY !== "your_openrouter_api_key_here",
     featuresSupported: {
       structuredOutput: true,
       nativeJSONSchema: true,
-      webSearch: true
-    }
+      webSearch: true,
+    },
   });
 }

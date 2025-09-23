@@ -1,6 +1,13 @@
 // JSON Schema for fraud analysis responses
 // This ensures consistent, structured outputs from AI models
 
+export interface URLVerification {
+  url: string;
+  status: 'legitimate' | 'suspicious' | 'unknown' | 'verified_scam';
+  verificationDetails: string; // Details from web search (e.g., "Established 2012, legitimate clothing retailer")
+  sources: string[]; // Sources used for verification (e.g., "Trustpilot", "Official website")
+}
+
 export interface FraudAnalysisResponse {
   category: 'fraud' | 'marketing' | 'suspicious' | 'context-required' | 'safe';
   riskLevel: 'low' | 'medium' | 'high';
@@ -8,6 +15,7 @@ export interface FraudAnalysisResponse {
   mainIndicators: string[];
   positiveIndicators: string[];
   negativeIndicators: string[];
+  urlVerifications: URLVerification[]; // Detailed URL verification results from web search (empty array when web search not used)
   educationalContext: {
     whyThisAssessment: string;
     commonLegitimateUse: string;
@@ -67,6 +75,37 @@ export const fraudAnalysisSchema = {
           type: "string"
         },
         description: "Negative/suspicious indicators (prefixed with ⚠️ or ❌)"
+      },
+      urlVerifications: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            url: {
+              type: "string",
+              description: "The URL that was verified"
+            },
+            status: {
+              type: "string",
+              enum: ["legitimate", "suspicious", "unknown", "verified_scam"],
+              description: "Verification status from web search"
+            },
+            verificationDetails: {
+              type: "string",
+              description: "Details from web search findings"
+            },
+            sources: {
+              type: "array",
+              items: {
+                type: "string"
+              },
+              description: "Sources used for verification"
+            }
+          },
+          required: ["url", "status", "verificationDetails", "sources"],
+          additionalProperties: false
+        },
+        description: "Detailed URL verification results from web search (only when web search is enabled)"
       },
       educationalContext: {
         type: "object",
@@ -140,6 +179,7 @@ export const fraudAnalysisSchema = {
       "mainIndicators",
       "positiveIndicators",
       "negativeIndicators",
+      "urlVerifications",
       "educationalContext",
       "verificationGuide",
       "actionableSteps",

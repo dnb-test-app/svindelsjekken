@@ -47,8 +47,26 @@ bun run dev
 # Installer avhengigheter
 bun install
 
-# Kjør utviklingsserver
+# 🚨 KRITISK: SJEKK ALLTID OM SERVER KJØRER FØR START
+# ALDRI start flere servere samtidig - dette vil forårsake port-konflikter
+
+# STEG 1: Sjekk om server allerede kjører
+ps aux | grep "bun run dev\|next dev" | grep -v grep
+# ELLER bruk lsof for å sjekke port 3000
+lsof -i :3000
+
+# STEG 2: Hvis ingen server kjører, start den
 bun run dev
+
+# STEG 3: Hvis server allerede kjører men du trenger å stoppe den
+# Finn prosess-ID og drep den
+kill $(lsof -t -i:3000)
+# ELLER bruk pkill
+pkill -f "bun run dev"
+
+# STEG 4: Start server i bakgrunnen (anbefalt for Claude Code)
+bun run dev &  # Starter i bakgrunnen
+# ELLER bruk Bash tool med run_in_background: true
 
 # Bygg for produksjon
 bun run build
@@ -875,6 +893,46 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 - **Button Secondary**: White background, #007272 border, 8px radius
 - **Input Fields**: 2px #e5e5e5 border, 8px radius, 1.25rem padding
 - **Cards**: White background, 12px radius, subtle shadow
+
+## 🤖 Claude Code Best Practices
+
+### Server Management (KRITISK)
+```bash
+# ALLTID sjekk om server kjører først:
+lsof -i :3000
+# Eller
+ps aux | grep "bun run dev" | grep -v grep
+
+# Hvis port er opptatt, stopp eksisterende server:
+kill $(lsof -t -i:3000)
+
+# Start server i bakgrunnen (anbefalt for Claude Code):
+# Bruk Bash tool med run_in_background: true
+```
+
+### Development Workflow
+1. **Før du starter**: Sjekk om dev server kjører på port 3000
+2. **Testing**: Bruk alltid Playwright for frontend-testing etter endringer
+3. **Design Compliance**: Sammenlign ALLTID med DNB.no før deploy
+4. **Error Handling**: Sjekk konsoll for feil etter hver endring
+
+### Background Process Management
+- Bruk `run_in_background: true` i Bash tool for langvarige prosesser
+- Sjekk prosess-status med BashOutput tool
+- Kill bakgrunnsprosesser med KillShell tool når ferdig
+
+### Playwright Testing Commands
+```bash
+# Test responsivt design
+bunx playwright test tests/e2e/responsive-test.spec.ts
+
+# Visuell regresjonstesting (sammenlign med DNB.no)
+bunx playwright test tests/visual --update-snapshots
+bunx playwright test tests/visual
+
+# Tilgjengelighetstesting
+bunx playwright test tests/a11y
+```
 
 ## Fremtidige forbedringer
 - [ ] Integrasjon med DNB's faktiske svindeldeteksjon-API
