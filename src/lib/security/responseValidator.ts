@@ -11,7 +11,7 @@ export interface ValidationResult {
 }
 
 export interface ExpectedResponse {
-  category?: 'fraud' | 'marketing' | 'suspicious' | 'safe';
+  category?: 'fraud' | 'marketing' | 'context-required' | 'info';
   riskLevel: 'low' | 'medium' | 'high';
   riskScore?: number;
   fraudProbability?: number;
@@ -84,14 +84,19 @@ export function validateDNBContext(response: any): ValidationResult {
     }
   }
 
-  // Check for prompt leakage
-  if (responseText.includes('[') && responseText.includes(']')) {
-    const bracketContent = responseText.match(/\[([^\]]+)\]/g);
-    if (bracketContent && bracketContent.some(content => 
-      content.length > 20 || content.includes('system') || content.includes('context')
-    )) {
-      errors.push('Potential prompt leakage detected');
-    }
+  // Check for prompt leakage (only flag EXACT system prompt markers)
+  // NOTE: Must be very specific to avoid false positives when AI uses words like "system" or "instructions" in analysis
+  const promptLeakagePatterns = [
+    /\[SYSTEM_CONTEXT\]/gi,  // Exact match only
+    /\[USER_INPUT_START\]/gi,  // Exact match only
+    /\[SYSTEM_PROMPT\]/gi,  // Exact match only
+    /\[INTERNAL_NOTE\]/gi,  // Exact match only
+    /<<SYSTEM>>/gi,  // Alternative system marker
+    /<<INSTRUCTIONS>>/gi  // Alternative instructions marker
+  ];
+
+  if (promptLeakagePatterns.some(pattern => pattern.test(responseText))) {
+    errors.push('Potential prompt leakage detected');
   }
 
   return {
@@ -115,7 +120,7 @@ export function validateResponseStructure(response: any): ValidationResult {
 
   // Validate category if present
   if (response.hasOwnProperty('category')) {
-    if (!['fraud', 'marketing', 'suspicious', 'safe'].includes(response.category)) {
+    if (!['fraud', 'marketing', 'context-required', 'info'].includes(response.category)) {
       errors.push('Invalid category value');
     }
   }
@@ -194,7 +199,7 @@ export function sanitizeResponse(response: any): ExpectedResponse {
   };
 
   // Sanitize category
-  if (['fraud', 'marketing', 'suspicious', 'safe'].includes(response.category)) {
+  if (['fraud', 'marketing', 'context-required', 'info'].includes(response.category)) {
     sanitized.category = response.category;
   }
 
@@ -289,7 +294,7 @@ export function validateResponse(response: any): {
     return {
       valid: false,
       sanitized: {
-        category: 'suspicious',
+        category: 'context-required',  // Valid category (was 'suspicious' which is invalid)
         riskLevel: 'high',
         fraudProbability: 75,
         recommendation: 'Teknisk feil i analyse. Kontakt DNB direkte på 915 04800 for verifisering.',

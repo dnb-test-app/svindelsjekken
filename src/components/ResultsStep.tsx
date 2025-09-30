@@ -23,9 +23,8 @@ interface AnalysisResult {
 
 interface URLVerification {
   url: string;
-  status: 'legitimate' | 'suspicious' | 'unknown' | 'verified_scam';
+  status: 'legitimate' | 'unknown' | 'verified_scam';
   verificationDetails: string;
-  sources: string[];
 }
 
 interface AIAnalysisResult {
@@ -40,7 +39,7 @@ interface AIAnalysisResult {
   mainIndicators?: string[];
   positiveIndicators?: string[];
   negativeIndicators?: string[];
-  category?: 'fraud' | 'marketing' | 'suspicious' | 'context-required' | 'safe';
+  category?: 'fraud' | 'marketing' | 'context-required' | 'info';
   urlVerifications: URLVerification[];
   educationalContext?: {
     whyThisAssessment: string;
@@ -107,57 +106,17 @@ export default function ResultsStep({
   const displayResult = aiAnalysis || result;
   if (!displayResult) return null;
 
-  // Handle different result formats
-  const getRiskLevel = () => {
-    if (aiAnalysis) return aiAnalysis.risk_level || aiAnalysis.riskLevel || 'low';
-    return result?.risk || 'low';
-  };
+  // Simplified data extraction
+  const riskLevel = aiAnalysis?.risk_level || aiAnalysis?.riskLevel || result?.risk || 'low';
+  const score = Math.round(aiAnalysis?.fraudProbability || aiAnalysis?.confidence || result?.score || 0);
+  const summary = aiAnalysis?.summary || aiAnalysis?.analysis || result?.explanation || '';
+  const recommendation = aiAnalysis?.recommendation || result?.recommendation || '';
+  const isSecurityBlock = aiAnalysis?.securityBlock || false;
 
-  const getScore = () => {
-    let score = 0;
-
-    if (aiAnalysis) {
-      score = aiAnalysis.fraudProbability || aiAnalysis.confidence || 0;
-    } else if (result) {
-      score = result.score || 0;
-    }
-
-    // Ensure we have a valid number
-    const numericScore = typeof score === 'number' ? score : parseFloat(score) || 0;
-    return Math.round(numericScore);
-  };
-
-  const getAnalysis = () => {
-    if (aiAnalysis) {
-      return aiAnalysis.summary || aiAnalysis.analysis || '';
-    }
-    return result?.explanation || '';
-  };
-
-  const getRecommendation = () => {
-    if (aiAnalysis) return aiAnalysis.recommendation || '';
-    return result?.recommendation || '';
-  };
-
-  const getMainIndicators = () => {
-    return aiAnalysis?.mainIndicators || [];
-  };
-
-  const getVerificationGuide = () => {
-    return aiAnalysis?.verificationGuide;
-  };
-
-  const getActionableSteps = () => {
-    return aiAnalysis?.actionableSteps || [];
-  };
-
-  const riskLevel = getRiskLevel();
-  const score = getScore();
-  const analysis = getAnalysis();
-  const recommendation = getRecommendation();
-  const mainIndicators = getMainIndicators();
-  const verificationGuide = getVerificationGuide();
-  const actionableSteps = getActionableSteps();
+  // Educational content
+  const educationalContext = aiAnalysis?.educationalContext;
+  const verificationGuide = aiAnalysis?.verificationGuide;
+  const actionableSteps = aiAnalysis?.actionableSteps || [];
 
   const getRiskVariant = () => {
     switch (riskLevel) {
@@ -178,14 +137,9 @@ export default function ResultsStep({
   };
 
   const getRiskDescription = () => {
-    const numericScore = score;
-
-    if (numericScore >= 80) return 'Høy sannsynlighet for svindel';
-    if (numericScore >= 60) return 'Mistenkelige elementer funnet';
-    if (numericScore >= 40) return 'Usikre signaler oppdaget';
-    if (numericScore >= 20) return 'Noen bekymringsverdig tegn';
-    if (numericScore >= 10) return 'Minimale risikoindikatorer';
-    return 'Ingen tegn til svindel funnet';
+    if (score >= 60) return 'Krever oppmerksomhet og verifisering';
+    if (score >= 30) return 'Vær forsiktig og sjekk nøye';
+    return 'Få risikosignaler funnet';
   };
 
   const getRiskIcon = () => {
@@ -234,228 +188,48 @@ export default function ResultsStep({
 
   return (
     <div style={{
-      maxWidth: '56rem',
+      maxWidth: '48rem',
       margin: '0 auto',
       padding: 'clamp(0.5rem, 3vw, 1rem)',
       paddingTop: 'clamp(1rem, 3vw, 2rem)'
     }}>
-      {/* HERO SECTION - Risk Assessment */}
-      <div style={{
-        backgroundColor: colors.bg,
-        border: `3px solid ${colors.border}`,
-        borderRadius: '1rem',
-        padding: 'clamp(1rem, 4vw, 2.5rem)',
-        marginBottom: 'clamp(1rem, 4vw, 2.5rem)',
-        textAlign: 'center',
-        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
-        position: 'relative',
-        overflow: 'hidden'
-      }}>
-        {/* Background Pattern */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          width: '200px',
-          height: '200px',
-          background: `radial-gradient(circle, ${colors.border}20 0%, transparent 70%)`,
-          zIndex: 0
-        }} />
 
-        {/* Content */}
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          {/* Large Risk Icon */}
-          <div style={{ marginBottom: 'clamp(0.75rem, 3vw, 1.5rem)' }}>
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 'clamp(3rem, 8vw, 5rem)',
-              height: 'clamp(3rem, 8vw, 5rem)',
-              borderRadius: '50%',
-              backgroundColor: colors.icon,
-              marginBottom: 'clamp(0.5rem, 2vw, 1rem)'
-            }}>
-              <Icon
-                name={getRiskIcon()}
-                size="large"
-                style={{ color: 'white' }}
-              />
-            </div>
-          </div>
-
-          {/* Risk Level Badge */}
-          <div style={{ marginBottom: 'clamp(0.5rem, 2vw, 1rem)' }}>
-            <Badge
-              text={getRiskText()}
-              variant={getRiskVariant()}
-              size="medium"
-              style={{
-                fontSize: 'clamp(0.875rem, 3vw, 1.125rem)',
-                fontWeight: 700,
-                padding: 'clamp(0.5rem, 2vw, 0.75rem) clamp(1rem, 3vw, 1.5rem)'
-              }}
-            />
-          </div>
-
-          {/* Main Headline */}
-          <Heading
-            size="large"
-            level="2"
-            style={{
-              margin: '0 0 clamp(0.5rem, 2vw, 1rem) 0',
-              color: colors.text,
-              fontWeight: 700,
-              lineHeight: 1.2,
-              fontSize: 'clamp(1.25rem, 4vw, 2rem)'
-            }}
-          >
-            {getRiskDescription()}
-          </Heading>
-
-          {/* Score Display */}
-          {score > 0 && (
-            <div style={{ marginBottom: 'clamp(0.75rem, 3vw, 1.5rem)' }}>
-              <div style={{
-                display: 'inline-block',
-                backgroundColor: 'white',
-                borderRadius: '2rem',
-                padding: 'clamp(0.5rem, 2vw, 0.75rem) clamp(1rem, 3vw, 1.5rem)',
-                border: `2px solid ${colors.border}`,
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-              }}>
-                <P style={{
-                  margin: 0,
-                  color: colors.text,
-                  fontWeight: 600,
-                  fontSize: 'clamp(0.875rem, 3vw, 1.125rem)'
-                }}>
-                  Risikoscore: {score}%
-                </P>
-              </div>
-            </div>
-          )}
-
-          {/* Analysis Summary */}
-          {analysis && (
-            <P size="large" style={{
-              margin: '0 auto',
-              maxWidth: '40rem',
-              color: colors.text,
-              lineHeight: 1.6,
-              fontWeight: 500
-            }}>
-              {analysis}
-            </P>
-          )}
-        </div>
-      </div>
-
-      {/* URL STATUS CARD */}
-      {originalText && (
-        <URLStatusCard
-          text={originalText}
-          positiveIndicators={aiAnalysis?.positiveIndicators || []}
-          negativeIndicators={aiAnalysis?.negativeIndicators || []}
-          category={aiAnalysis?.category}
-          webSearchUsed={aiAnalysis?.webSearchUsed}
-          webSearchReasons={aiAnalysis?.webSearchReasons}
-          urlVerifications={aiAnalysis?.urlVerifications || []}
-        />
-      )}
-
-      {/* POSITIVE/NEGATIVE INDICATORS */}
-      {(aiAnalysis?.positiveIndicators?.length || aiAnalysis?.negativeIndicators?.length) && (
-        <Card spacing="medium" style={{ marginBottom: 'clamp(1rem, 4vw, 2.5rem)' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'clamp(0.5rem, 2vw, 0.75rem)',
-            marginBottom: 'clamp(1rem, 3vw, 1.5rem)'
-          }}>
-            <Icon name="exclamation" size="medium" style={{ color: 'var(--color-sea-green)' }} />
-            <Heading size="medium" level="2" style={{
-              margin: 0,
-              fontSize: 'clamp(1.125rem, 4vw, 1.5rem)'
-            }}>
-              Funn i analysen
+      {/* SECURITY WARNING - if security block */}
+      {isSecurityBlock && (
+        <Card spacing="large" style={{
+          marginBottom: '2rem',
+          border: '3px solid var(--color-fire-red)',
+          backgroundColor: '#FEE2E2'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+            <Icon name="warning" size="large" style={{ color: 'var(--color-fire-red)' }} />
+            <Heading size="large" style={{ color: 'var(--color-fire-red)', margin: 0 }}>
+              Sikkerhetstrussel blokkert
             </Heading>
           </div>
-
-          <div style={{ display: 'grid', gap: 'clamp(0.75rem, 2vw, 1rem)' }}>
-            {/* Positive Indicators */}
-            {aiAnalysis?.positiveIndicators?.map((indicator, index) => (
-              <div
-                key={`positive-${index}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 'clamp(0.75rem, 2vw, 1rem)',
-                  padding: 'clamp(0.75rem, 2vw, 1rem)',
-                  backgroundColor: '#D1FAE5',
-                  borderRadius: '0.75rem',
-                  border: '2px solid #10B981'
-                }}
-              >
-                <div style={{
-                  backgroundColor: '#10B981',
-                  borderRadius: '50%',
-                  padding: 'clamp(0.375rem, 1vw, 0.5rem)',
-                  flexShrink: 0
-                }}>
-                  <Icon name="check" size="small" style={{ color: 'white' }} />
-                </div>
-                <P size="medium" style={{
-                  margin: 0,
-                  color: '#065F46',
-                  fontWeight: 500,
-                  lineHeight: 1.5,
-                  fontSize: 'clamp(0.875rem, 3vw, 1rem)'
-                }}>
-                  {indicator}
-                </P>
-              </div>
-            ))}
-
-            {/* Negative Indicators */}
-            {aiAnalysis?.negativeIndicators?.map((indicator, index) => (
-              <div
-                key={`negative-${index}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 'clamp(0.75rem, 2vw, 1rem)',
-                  padding: 'clamp(0.75rem, 2vw, 1rem)',
-                  backgroundColor: '#FEE2E2',
-                  borderRadius: '0.75rem',
-                  border: '2px solid #DC2626'
-                }}
-              >
-                <div style={{
-                  backgroundColor: '#DC2626',
-                  borderRadius: '50%',
-                  padding: 'clamp(0.375rem, 1vw, 0.5rem)',
-                  flexShrink: 0
-                }}>
-                  <Icon name="close" size="small" style={{ color: 'white' }} />
-                </div>
-                <P size="medium" style={{
-                  margin: 0,
-                  color: '#991B1B',
-                  fontWeight: 500,
-                  lineHeight: 1.5,
-                  fontSize: 'clamp(0.875rem, 3vw, 1rem)'
-                }}>
-                  {indicator}
-                </P>
-              </div>
-            ))}
-          </div>
+          <P style={{ color: 'var(--color-black-80)', marginBottom: '1rem' }}>
+            {summary}
+          </P>
+          <P style={{ fontWeight: 600, color: 'var(--color-fire-red)' }}>
+            {recommendation}
+          </P>
         </Card>
       )}
 
-      {/* VIKTIG Å VITE - EDUCATIONAL CONTEXT */}
-      {aiAnalysis?.educationalContext && (
+      {/* URL VERIFICATION CARD - Show first so users see category and URL checks immediately */}
+      {aiAnalysis && !isSecurityBlock && (
+        <URLStatusCard
+          positiveIndicators={aiAnalysis.positiveIndicators}
+          negativeIndicators={aiAnalysis.negativeIndicators}
+          category={aiAnalysis.category}
+          webSearchUsed={aiAnalysis.webSearchUsed}
+          webSearchReasons={aiAnalysis.webSearchReasons}
+          urlVerifications={aiAnalysis.urlVerifications || []}
+        />
+      )}
+
+      {/* MAIN RESULT CARD - simplified */}
+      {!isSecurityBlock && (
         <Card spacing="large" style={{
           marginBottom: 'clamp(1rem, 4vw, 2.5rem)',
           border: '3px solid var(--color-mint-green)',
@@ -484,10 +258,10 @@ export default function ResultsStep({
             </Heading>
           </div>
 
-          <div style={{ display: 'grid', gap: 'clamp(1rem, 3vw, 1.5rem)' }}>
+          <div style={{ display: 'grid', gap: '1.5rem' }}>
             {/* Why This Assessment */}
             <div style={{
-              padding: 'clamp(1rem, 3vw, 1.25rem)',
+              padding: '1.25rem',
               backgroundColor: 'white',
               borderRadius: '0.75rem',
               border: '2px solid var(--color-sea-green-30)'
@@ -495,8 +269,8 @@ export default function ResultsStep({
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 'clamp(0.5rem, 2vw, 0.75rem)',
-                marginBottom: 'clamp(0.5rem, 2vw, 0.75rem)'
+                gap: '0.75rem',
+                marginBottom: '0.75rem'
               }}>
                 <Icon name="question" size="small" style={{ color: 'var(--color-sea-green)' }} />
                 <Heading size="medium" level="3" style={{ margin: 0, color: 'var(--color-sea-green)' }}>
@@ -504,13 +278,13 @@ export default function ResultsStep({
                 </Heading>
               </div>
               <P style={{ margin: 0, color: 'var(--color-black-80)', lineHeight: 1.6 }}>
-                {aiAnalysis.educationalContext.whyThisAssessment}
+                {educationalContext?.whyThisAssessment}
               </P>
             </div>
 
             {/* Legitimate Use */}
             <div style={{
-              padding: 'clamp(1rem, 3vw, 1.25rem)',
+              padding: '1.25rem',
               backgroundColor: 'white',
               borderRadius: '0.75rem',
               border: '2px solid var(--color-sea-green-30)'
@@ -518,8 +292,8 @@ export default function ResultsStep({
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 'clamp(0.5rem, 2vw, 0.75rem)',
-                marginBottom: 'clamp(0.5rem, 2vw, 0.75rem)'
+                gap: '0.75rem',
+                marginBottom: '0.75rem'
               }}>
                 <Icon name="check_circle" size="small" style={{ color: 'var(--color-summer-green)' }} />
                 <Heading size="medium" level="3" style={{ margin: 0, color: 'var(--color-summer-green)' }}>
@@ -527,13 +301,13 @@ export default function ResultsStep({
                 </Heading>
               </div>
               <P style={{ margin: 0, color: 'var(--color-black-80)', lineHeight: 1.6 }}>
-                {aiAnalysis.educationalContext.commonLegitimateUse}
+                {educationalContext?.commonLegitimateUse}
               </P>
             </div>
 
             {/* Key Difference */}
             <div style={{
-              padding: 'clamp(1rem, 3vw, 1.25rem)',
+              padding: '1.25rem',
               backgroundColor: 'white',
               borderRadius: '0.75rem',
               border: '2px solid var(--color-sea-green-30)'
@@ -541,8 +315,8 @@ export default function ResultsStep({
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 'clamp(0.5rem, 2vw, 0.75rem)',
-                marginBottom: 'clamp(0.5rem, 2vw, 0.75rem)'
+                gap: '0.75rem',
+                marginBottom: '0.75rem'
               }}>
                 <Icon name="warning" size="small" style={{ color: 'var(--color-signal-orange)' }} />
                 <Heading size="medium" level="3" style={{ margin: 0, color: 'var(--color-signal-orange)' }}>
@@ -550,15 +324,15 @@ export default function ResultsStep({
                 </Heading>
               </div>
               <P style={{ margin: 0, color: 'var(--color-black-80)', lineHeight: 1.6 }}>
-                {aiAnalysis.educationalContext.keyDifference}
+                {educationalContext?.keyDifference}
               </P>
             </div>
           </div>
         </Card>
       )}
 
-      {/* KEY INDICATORS */}
-      {mainIndicators.length > 0 && (
+      {/* KEY INDICATORS - simplified */}
+      {aiAnalysis?.mainIndicators && aiAnalysis.mainIndicators.length > 0 && (
         <Card spacing="medium" style={{ marginBottom: 'clamp(1rem, 4vw, 2.5rem)' }}>
           <div style={{
             display: 'flex',
@@ -575,15 +349,15 @@ export default function ResultsStep({
             </Heading>
           </div>
 
-          <div style={{ display: 'grid', gap: 'clamp(0.75rem, 2vw, 1rem)' }}>
-            {mainIndicators.map((indicator, index) => (
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {aiAnalysis.mainIndicators.slice(0, 3).map((indicator, index) => (
               <div
                 key={index}
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',
-                  gap: 'clamp(0.75rem, 2vw, 1rem)',
-                  padding: 'clamp(0.75rem, 2vw, 1rem)',
+                  gap: '1rem',
+                  padding: '1rem',
                   backgroundColor: '#FEF3C7',
                   borderRadius: '0.75rem',
                   border: '2px solid #F59E0B'
