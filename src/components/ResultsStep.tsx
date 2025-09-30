@@ -2,7 +2,6 @@
 
 import React from 'react';
 import {
-  ProgressIndicator,
   Card,
   Heading,
   P,
@@ -12,6 +11,7 @@ import {
   Icon
 } from '@dnb/eufemia';
 import URLStatusCard from './URLStatusCard';
+import LoadingAnalysis from './LoadingAnalysis';
 import { getRiskColors, getRiskText, getRiskDescription, getRiskIcon } from '@/lib/constants/riskConstants';
 
 interface AnalysisResult {
@@ -73,25 +73,7 @@ export default function ResultsStep({
   originalText = ''
 }: ResultsStepProps) {
   if (isAnalyzing) {
-    return (
-      <div style={{ maxWidth: '48rem', margin: '0 auto', textAlign: 'center' }}>
-        <Space top="xx-large" bottom="xx-large">
-          <ProgressIndicator size="large" />
-          <Space top="large">
-            <Heading size="large" level="3">
-              Analyserer med AI...
-            </Heading>
-            <Space top="medium">
-              <div style={{ maxWidth: '32rem', margin: '0 auto' }}>
-                <P size="medium">
-                  Vi bruker avansert AI for å gi deg den mest nøyaktige analysen basert på konteksten du oppga.
-                </P>
-              </div>
-            </Space>
-          </Space>
-        </Space>
-      </div>
-    );
+    return <LoadingAnalysis />;
   }
 
   if (!result && !aiAnalysis) {
