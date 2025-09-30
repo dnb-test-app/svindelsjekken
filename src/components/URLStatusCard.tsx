@@ -129,21 +129,32 @@ export default function URLStatusCard({
         );
       })()}
 
-      <Space bottom="medium">
-        <Heading size="medium" level="3" style={{
-          margin: 0,
-          color: 'var(--color-black)',
-          fontWeight: 500
-        }}>
-          🔍 URLs funnet og sjekket:
-        </Heading>
-      </Space>
+      <Heading size="medium" level="3" style={{
+        margin: '0 0 var(--spacing-small) 0',
+        color: 'var(--color-black)',
+        fontWeight: 500
+      }}>
+        🔍 URLs funnet og sjekket:
+      </Heading>
 
-      <div style={{ display: 'grid', gap: 'var(--spacing-large)' }}>
+      {/* Important notice about link verification */}
+      <div style={{
+        backgroundColor: '#FEF3C7',
+        border: '2px solid #F59E0B',
+        borderRadius: '8px',
+        padding: 'var(--spacing-medium)',
+        marginBottom: 'var(--spacing-small)'
+      }}>
+        <P size="small" style={{ margin: 0, color: '#92400E' }}>
+          <strong>⚠️ Viktig:</strong> Lenketekst kan skjule ekte adresse. Hold musen over lenken (ikke klikk) for å se hvor den faktisk går.
+        </P>
+      </div>
+
+      <div style={{ display: 'grid', gap: 'var(--spacing-medium)' }}>
         {deduplicatedVerifications.map((verification, index) => {
           const statusInfo = getStatusInfo(verification);
           return (
-            <div key={index} style={{ marginBottom: 'var(--spacing-medium)' }}>
+            <div key={index}>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
