@@ -5,11 +5,7 @@ import {
   Button,
   Textarea,
   P,
-  FormRow,
   Space,
-  Card,
-  Icon,
-  ProgressIndicator
 } from '@dnb/eufemia';
 import LoadingAnalysis from './LoadingAnalysis';
 
@@ -17,7 +13,6 @@ interface AnalysisStepProps {
   text: string;
   setText: (text: string) => void;
   imagePreview: string | null;
-  setImagePreview: (preview: string | null) => void;
   isAnalyzing: boolean;
   isProcessingImage: boolean;
   ocrProgress: number;
@@ -32,7 +27,6 @@ export default function AnalysisStep({
   text,
   setText,
   imagePreview,
-  setImagePreview,
   isAnalyzing,
   isProcessingImage,
   ocrProgress,

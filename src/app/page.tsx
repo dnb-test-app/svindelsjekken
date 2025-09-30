@@ -643,7 +643,6 @@ export default function Home() {
                 text={analysisState.text}
                 setText={analysisState.setText}
                 imagePreview={imageUpload.imagePreview}
-                setImagePreview={imageUpload.setImagePreview}
                 isAnalyzing={analysisState.isAnalyzing}
                 isProcessingImage={imageUpload.isProcessingImage}
                 ocrProgress={imageUpload.ocrProgress}

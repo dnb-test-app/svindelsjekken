@@ -25,7 +25,7 @@ export async function runOCR(
   try {
     // Create worker with Norwegian and English support
     worker = await createWorker(['nor', 'eng'], 1, {
-      logger: onProgress ? (m) => onProgress({ status: m.status, progress: m.progress }) : undefined,
+      logger: onProgress ? (m) => onProgress({ status: m.status, progress: m.progress * 100 }) : undefined,
     });
 
     // Convert file to data URL
