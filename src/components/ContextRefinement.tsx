@@ -118,15 +118,8 @@ export default function ContextRefinement({
                         size="small"
                         disabled={isAnalyzing}
                         onClick={() => handleQuestionAnswer(questionObj.question, 'yes')}
-                        style={{
-                          minWidth: '80px',
-                          fontWeight: currentAnswer === 'yes' ? 600 : 400
-                        }}
                       >
-                        <span style={{ marginRight: 'var(--spacing-x-small)' }}>
-                          {currentAnswer === 'yes' ? '✅' : '○'}
-                        </span>
-                        JA
+                        {currentAnswer === 'yes' ? '✅' : '○'} JA
                       </Button>
 
                       <Button
@@ -134,17 +127,8 @@ export default function ContextRefinement({
                         size="small"
                         disabled={isAnalyzing}
                         onClick={() => handleQuestionAnswer(questionObj.question, 'no')}
-                        style={{
-                          minWidth: '80px',
-                          fontWeight: currentAnswer === 'no' ? 600 : 400,
-                          backgroundColor: currentAnswer === 'no' ? 'var(--color-cherry-red)' : undefined,
-                          borderColor: currentAnswer === 'no' ? 'var(--color-cherry-red)' : undefined
-                        }}
                       >
-                        <span style={{ marginRight: 'var(--spacing-x-small)' }}>
-                          {currentAnswer === 'no' ? '❌' : '○'}
-                        </span>
-                        NEI
+                        {currentAnswer === 'no' ? '❌' : '○'} NEI
                       </Button>
                     </div>
                   );
@@ -163,15 +147,8 @@ export default function ContextRefinement({
                           size="small"
                           disabled={isAnalyzing}
                           onClick={() => handleQuestionAnswer(questionObj.question, option.value)}
-                          style={{
-                            minWidth: '80px',
-                            fontWeight: currentAnswer === option.value ? 600 : 400
-                          }}
                         >
-                          <span style={{ marginRight: 'var(--spacing-x-small)' }}>
-                            {option.emoji ? option.emoji : (currentAnswer === option.value ? '✅' : '○')}
-                          </span>
-                          {option.label}
+                          {option.emoji ? option.emoji : (currentAnswer === option.value ? '✅' : '○')} {option.label}
                         </Button>
                       ))}
                     </div>
@@ -250,22 +227,8 @@ export default function ContextRefinement({
           size="large"
           disabled={!hasContext || isAnalyzing}
           onClick={handleRefineAnalysis}
-          style={{
-            minWidth: '200px',
-            fontWeight: 600
-          }}
         >
-          {isAnalyzing ? (
-            <>
-              <span style={{ marginRight: 'var(--spacing-small)' }}>⏳</span>
-              Analyserer...
-            </>
-          ) : (
-            <>
-              <span style={{ marginRight: 'var(--spacing-small)' }}>🔍</span>
-              Se resultater
-            </>
-          )}
+          {isAnalyzing ? '⏳ Analyserer...' : '🔍 Se resultater'}
         </Button>
       </div>
 

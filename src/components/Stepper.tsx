@@ -108,8 +108,10 @@ export default function Stepper({ steps, onStepClick, className = '' }: StepperP
                     fontWeight: step.isActive || step.isCompleted ? 600 : 400,
                     color: step.isSkipped
                       ? 'var(--color-black-40)'
-                      : step.isActive || step.isCompleted
+                      : step.isActive
                       ? 'var(--color-sea-green)'
+                      : step.isCompleted
+                      ? 'var(--color-black-80)'
                       : 'var(--color-black-60)',
                     textAlign: 'center',
                     maxWidth: '120px',
