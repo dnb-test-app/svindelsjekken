@@ -71,6 +71,37 @@ export function extractDomain(url: string): string {
 }
 
 /**
+ * Deduplicate URLs by domain, keeping only one URL per domain
+ * Prefers shorter, cleaner URLs (like root domain over deep paths)
+ */
+export function deduplicateURLsByDomain(urls: string[]): string[] {
+  const domainMap = new Map<string, string>();
+
+  urls.forEach(url => {
+    const domain = extractDomain(url);
+    const existing = domainMap.get(domain);
+
+    if (!existing) {
+      // First URL for this domain
+      domainMap.set(domain, url);
+    } else {
+      // Choose the cleaner URL (shorter path, prefer root)
+      const existingPath = existing.split('/').slice(3).join('/'); // Remove protocol and domain
+      const currentPath = url.split('/').slice(3).join('/');
+
+      // Prefer shorter paths or root domains
+      if (currentPath.length < existingPath.length ||
+          (!currentPath && existingPath) ||
+          (currentPath === '' && existingPath !== '')) {
+        domainMap.set(domain, url);
+      }
+    }
+  });
+
+  return Array.from(domainMap.values());
+}
+
+/**
  * Calculate string similarity (simple Levenshtein-based)
  */
 function calculateSimilarity(str1: string, str2: string): number {

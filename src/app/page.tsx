@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Button, Textarea, Logo, Dropdown, Badge, P, ProgressIndicator, Input } from "@dnb/eufemia";
+import {
+  Button,
+  Textarea,
+  Logo,
+  Dropdown,
+  Badge,
+  P,
+  ProgressIndicator,
+  Input,
+} from "@dnb/eufemia";
 import ContextRefinement from "@/components/ContextRefinement";
 import Stepper, { useStepperState } from "@/components/Stepper";
 import AnalysisStep from "@/components/AnalysisStep";
@@ -11,14 +20,15 @@ import {
   needsWebSearchVerification,
   getWebSearchReasons,
 } from "@/lib/fraudDetection";
+import { runOCR, type OCRProgress } from "@/lib/ocr";
 
 export default function Home() {
   const [text, setText] = useState("");
   const [result, setResult] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("openai/gpt-4o-mini");
-  const [defaultModel, setDefaultModel] = useState("openai/gpt-4o-mini");
+  const [selectedModel, setSelectedModel] = useState("openai/gpt-5-mini");
+  const [defaultModel, setDefaultModel] = useState("openai/gpt-5-mini");
   const [hasUserSelectedModel, setHasUserSelectedModel] = useState(false);
   const [pendingModel, setPendingModel] = useState<string>("");
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
@@ -42,10 +52,10 @@ export default function Home() {
   // Image upload states
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [ocrText, setOcrText] = useState<string>("");
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [ocrProgress, setOcrProgress] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [ocrExtractedText, setOcrExtractedText] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // URL detection states
@@ -70,7 +80,7 @@ export default function Home() {
     fetch("/api/analyze")
       .then((res) => res.json())
       .then((data) => {
-        const apiDefaultModel = data.defaultModel || "openai/gpt-4o-mini";
+        const apiDefaultModel = data.defaultModel || "openai/gpt-5-mini";
         setDefaultModel(apiDefaultModel);
 
         const saved = localStorage.getItem("selectedAIModel");
@@ -80,7 +90,7 @@ export default function Home() {
       })
       .catch(() => {
         // Fallback if API fails
-        const fallbackDefault = "openai/gpt-4o-mini";
+        const fallbackDefault = "openai/gpt-5-mini";
         setDefaultModel(fallbackDefault);
 
         const saved = localStorage.getItem("selectedAIModel");
@@ -266,221 +276,8 @@ export default function Home() {
     });
   }, []);
 
-  // Process uploaded file
-  const processFile = useCallback(
-    async (file: File) => {
-      // Validate file size (max 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        alert("Filen er for stor. Maksimal størrelse er 10MB.");
-        return;
-      }
 
-      setIsProcessingImage(true);
-      setOcrProgress(0);
-
-      // Smooth continuous progress animation (no jumps)
-      let progressAnimation: NodeJS.Timeout | null = null;
-      let currentProgress = 0;
-      let targetProgress = 10; // Start with a low target
-
-      const animateProgress = () => {
-        progressAnimation = setInterval(() => {
-          if (currentProgress < targetProgress) {
-            currentProgress += Math.random() * 1.5 + 0.5; // Smaller, smoother increments
-            if (currentProgress > targetProgress)
-              currentProgress = targetProgress;
-            setOcrProgress(Math.floor(currentProgress));
-          }
-        }, 150);
-      };
-
-      const updateTarget = (newTarget: number) => {
-        targetProgress = newTarget;
-      };
-
-      const stopProgress = () => {
-        if (progressAnimation) {
-          clearInterval(progressAnimation);
-          progressAnimation = null;
-        }
-      };
-
-      animateProgress();
-
-      // Show preview for images
-      if (file.type.startsWith("image/")) {
-        const reader = new FileReader();
-        reader.onload = (e) => setImagePreview(e.target?.result as string);
-        reader.readAsDataURL(file);
-      }
-
-      try {
-        if (file.type.startsWith("image/") || file.type === "application/pdf") {
-          // Compress image if it's an image file (helps with iPhone uploads)
-          let fileToUpload = file;
-          if (
-            file.type.startsWith("image/") ||
-            file.name.toLowerCase().match(/\.(heic|heif|jpg|jpeg|png|webp)$/)
-          ) {
-            updateTarget(25); // Compression phase
-            console.log(
-              `Original file: ${file.name}, type: ${file.type}, size: ${(file.size / 1024 / 1024).toFixed(2)}MB`,
-            );
-
-            try {
-              fileToUpload = await compressImage(file);
-              console.log(
-                `Final file for upload: ${fileToUpload.name}, type: ${fileToUpload.type}, size: ${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB`,
-              );
-            } catch (error) {
-              console.warn(
-                "Image compression failed, using original file:",
-                error,
-              );
-              fileToUpload = file; // Use original file if compression fails
-            }
-          }
-
-          // Prepare form data
-          updateTarget(35); // Preparing upload
-          const formData = new FormData();
-          formData.append("image", fileToUpload);
-          formData.append("model", selectedModel);
-
-          updateTarget(50); // About to send request
-
-          // Send to API for OCR and analysis
-          updateTarget(70); // Uploading
-          const response = await fetch("/api/analyze", {
-            method: "POST",
-            body: formData,
-          });
-
-          updateTarget(85); // Processing response
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Upload error:", response.status, errorText);
-
-            if (response.status === 413) {
-              throw new Error(
-                "Bildet er for stort å laste opp. Prøv et mindre bilde eller ta et nytt bilde med lavere oppløsning.",
-              );
-            } else if (response.status === 429) {
-              throw new Error(
-                "For mange forespørsler. Vent et øyeblikk og prøv igjen.",
-              );
-            } else if (response.status >= 500) {
-              throw new Error("Server-feil. Prøv igjen om litt.");
-            } else {
-              throw new Error(`Upload feilet: ${errorText || "Ukjent feil"}`);
-            }
-          }
-
-          const result = await response.json();
-          updateTarget(95); // Almost done
-
-          // Final completion
-          setTimeout(() => {
-            updateTarget(100);
-            setTimeout(() => {
-              currentProgress = 100;
-              setOcrProgress(100);
-            }, 300);
-          }, 200);
-
-          if (result.extractedText) {
-            // If API already provided analysis, use it
-            if (result.fraudProbability !== undefined) {
-              const analysisResult = {
-                category: result.category || "safe",
-                score: result.fraudProbability,
-                risk: result.riskLevel || "low",
-                triggers:
-                  result.mainIndicators?.map((ind: string) => ({
-                    pattern: ind,
-                    category: "api_detected",
-                    weight: 10,
-                  })) || [],
-                categories: ["api_analysis"],
-                aiEnhanced: true,
-                recommendation: result.recommendation,
-                summary: result.summary,
-                isImageAnalysis: true, // Mark this as image analysis
-                extractedText: result.extractedText, // Store but don't show in input
-                urlsFound: result.urlsFound || [], // URLs found in the image
-                webSearchResults: result.webSearchResults || {}, // Web search findings
-                educationalContext: result.educationalContext || null,
-                verificationGuide: result.verificationGuide || null,
-                actionableSteps: result.actionableSteps || [],
-              };
-
-              setResult(analysisResult);
-              setRequiresRefinement(false);
-              stepperState.markStepCompleted(1);
-              stepperState.markStepCompleted(2);
-              stepperState.goToStep(3);
-            } else {
-              // No analysis available - NEVER mark as safe!
-              setResult({
-                category: "error",
-                score: 50,
-                risk: "medium",
-                triggers: [
-                  {
-                    pattern: "Analyse ikke tilgjengelig",
-                    category: "technical_error",
-                    weight: 50,
-                  },
-                ],
-                categories: ["error"],
-                recommendation:
-                  "Analyse ikke tilgjengelig. Vær forsiktig og kontakt DNB på 915 04800 ved tvil.",
-                summary:
-                  "Tekst ekstrahert men analyse feilet - vær ekstra forsiktig",
-                isImageAnalysis: true,
-                extractedText: result.extractedText,
-              });
-            }
-          } else if (result.error) {
-            throw new Error(result.error);
-          }
-        }
-      } catch (error: any) {
-        // Stop progress animation on error
-        stopProgress();
-        console.error("Feil ved prosessering av fil:", error);
-
-        let errorMessage = "Kunne ikke prosessere filen";
-
-        if (error.message) {
-          errorMessage = error.message;
-        } else if (error.name === "NetworkError") {
-          errorMessage = "Nettverksfeil. Sjekk internettforbindelsen din.";
-        } else if (
-          error.name === "TypeError" &&
-          error.message.includes("fetch")
-        ) {
-          errorMessage = "Kan ikke koble til server. Prøv igjen senere.";
-        }
-
-        // Show error with helpful guidance
-        alert(
-          `⚠️ ${errorMessage}\n\n💡 Tips for iPhone-brukere:\n• Ta bilder i normal oppløsning (ikke 4K)\n• Bruk JPEG-format hvis mulig\n• Prøv å ta et nytt, mindre bilde`,
-        );
-      } finally {
-        // Clean up progress animation
-        stopProgress();
-        setTimeout(() => {
-          setIsProcessingImage(false);
-          setOcrProgress(0);
-        }, 500); // Small delay to show 100% completion
-      }
-    },
-    [selectedModel, compressImage, stepperState],
-  );
-
-  // Simplified file processing that stores file, preview, and extracts OCR text
+  // Store file and run OCR for images
   const storeFile = useCallback(async (file: File) => {
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
@@ -491,43 +288,26 @@ export default function Home() {
     // Store the file for later analysis
     setUploadedFile(file);
 
-    // Show preview and extract OCR text for images
+    // Show preview and run OCR for images
     if (file.type.startsWith("image/")) {
+      // Show preview
       const reader = new FileReader();
-      reader.onload = async (e) => {
-        const imageDataUrl = e.target?.result as string;
-        setImagePreview(imageDataUrl);
-
-        // Run lightweight OCR to extract text
-        try {
-          setIsProcessingImage(true);
-          setOcrProgress(10);
-
-          const { createWorker } = await import('tesseract.js');
-          const worker = await createWorker('nor+eng');
-
-          setOcrProgress(50);
-          const { data: { text: extractedText } } = await worker.recognize(imageDataUrl);
-          await worker.terminate();
-
-          setOcrProgress(100);
-
-          // Store the extracted text separately and also set as main text input
-          if (extractedText.trim()) {
-            setOcrExtractedText(extractedText.trim());
-            setText(extractedText.trim());
-          }
-
-        } catch (error) {
-          console.error('OCR extraction failed:', error);
-        } finally {
-          setTimeout(() => {
-            setIsProcessingImage(false);
-            setOcrProgress(0);
-          }, 500);
-        }
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string);
       };
       reader.readAsDataURL(file);
+
+      // Run OCR in background
+      setIsProcessingImage(true);
+      setOcrProgress(0);
+
+      const extractedText = await runOCR(file, (progress: OCRProgress) => {
+        setOcrProgress(Math.round(progress.progress * 100));
+      });
+
+      setOcrText(extractedText);
+      setIsProcessingImage(false);
+      setOcrProgress(100);
     }
   }, []);
 
@@ -561,21 +341,24 @@ export default function Home() {
   };
 
   // Handle paste
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
 
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith("image/")) {
-        const file = items[i].getAsFile();
-        if (file) {
-          storeFile(file);
-          e.preventDefault();
-          break;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
+          if (file) {
+            storeFile(file);
+            e.preventDefault();
+            break;
+          }
         }
       }
-    }
-  }, [storeFile]);
+    },
+    [storeFile],
+  );
 
   // Global paste handler for document
   useEffect(() => {
@@ -603,6 +386,8 @@ export default function Home() {
   const handleRemoveImage = () => {
     setImagePreview(null);
     setUploadedFile(null);
+    setOcrText("");
+    setOcrProgress(0);
   };
 
   const handleCheck = async () => {
@@ -622,7 +407,7 @@ export default function Home() {
           const reader = new FileReader();
           reader.onload = () => {
             const result = reader.result as string;
-            const base64Data = result.split(',')[1]; // Remove data:type;base64, prefix
+            const base64Data = result.split(",")[1]; // Remove data:type;base64, prefix
             resolve(base64Data);
           };
           reader.onerror = reject;
@@ -640,13 +425,6 @@ export default function Home() {
       }
     }
 
-    // If we have OCR text and an image, use the OCR text with XML tags
-    if (imageData && ocrExtractedText) {
-      analysisText = `<ocr_extracted_text>\n${ocrExtractedText}\n</ocr_extracted_text>`;
-    } else if (!analysisText && ocrExtractedText) {
-      // If no user text but we have OCR, use OCR without XML tags (for text-only OCR)
-      analysisText = ocrExtractedText;
-    }
 
     // Check if we need web verification
     const needsWebVerification = needsWebSearchVerification(analysisText);
@@ -667,8 +445,11 @@ export default function Home() {
     // Try AI analysis if we have sufficient text OR an image
     if (analysisText.length >= 5 || imageData) {
       try {
-        const baseModel = typeof selectedModel === "string" ? selectedModel : defaultModel;
-        const modelToUse = needsWebVerification ? `${baseModel}:online` : baseModel;
+        const baseModel =
+          typeof selectedModel === "string" ? selectedModel : defaultModel;
+        const modelToUse = needsWebVerification
+          ? `${baseModel}:online`
+          : baseModel;
 
         // Prepare context object
         const contextData: any = {};
@@ -676,6 +457,11 @@ export default function Home() {
         // Add image data if available
         if (imageData) {
           contextData.imageData = imageData;
+        }
+
+        // Add OCR text if extracted
+        if (ocrText) {
+          contextData.ocrText = ocrText;
         }
 
         // Add additional context for URLs
@@ -691,7 +477,8 @@ export default function Home() {
           body: JSON.stringify({
             text: analysisText,
             model: modelToUse,
-            context: Object.keys(contextData).length > 0 ? contextData : undefined,
+            context:
+              Object.keys(contextData).length > 0 ? contextData : undefined,
           }),
         });
 
@@ -739,7 +526,7 @@ export default function Home() {
 
           // Use AI-based risk assessment with categories
           const analysisResult = {
-            category: aiResult.category || "safe",
+            category: aiResult.category || "info",
             score: aiResult.fraudProbability || 0,
             risk: aiResult.riskLevel || "low",
             triggers:
@@ -760,7 +547,8 @@ export default function Home() {
           // Check if context refinement is needed
           const needsRefinement =
             aiResult.category === "context-required" ||
-            (aiResult.followUpQuestions && aiResult.followUpQuestions.length > 0);
+            (aiResult.followUpQuestions &&
+              aiResult.followUpQuestions.length > 0);
 
           if (needsRefinement) {
             // Store preliminary analysis and advance to Step 2
@@ -822,7 +610,6 @@ export default function Home() {
     setAiAnalysis(null);
     setImagePreview(null);
     setOcrProgress(0);
-    setOcrExtractedText("");
     setUploadedFile(null);
     setUrlDetected(false);
     setAdditionalContext("");
@@ -836,7 +623,7 @@ export default function Home() {
   };
 
   const handleRefineAnalysis = async (
-    questionAnswers: Record<string, "yes" | "no">,
+    questionAnswers: Record<string, string>, // Updated to accept any string value, not just 'yes'/'no'
     refinementContext: string,
   ) => {
     // Allow refinement if we have either sufficient text OR an image
@@ -852,11 +639,8 @@ export default function Home() {
     // Clean text for API
     const cleanedText = text.replace(/rairai/gi, "").trim();
 
-    // Prepare text with OCR context if available
-    let refinedText = cleanedText;
-    if (ocrExtractedText) {
-      refinedText = `<ocr_extracted_text>\n${ocrExtractedText}\n</ocr_extracted_text>\n\nUser provided context: ${cleanedText}`;
-    }
+    // Server will handle OCR extraction from images
+    const refinedText = cleanedText;
 
     try {
       const modelToUse =
@@ -873,18 +657,20 @@ export default function Home() {
         questionAnswers,
         additionalContext: combinedContext,
         // Include the preliminary analysis results
-        initialAnalysis: preliminaryAnalysis ? {
-          category: preliminaryAnalysis.category,
-          score: preliminaryAnalysis.score,
-          risk: preliminaryAnalysis.risk,
-          triggers: preliminaryAnalysis.triggers,
-          recommendation: preliminaryAnalysis.recommendation,
-          summary: preliminaryAnalysis.summary,
-          mainIndicators: aiAnalysis?.mainIndicators,
-          positiveIndicators: aiAnalysis?.positiveIndicators,
-          negativeIndicators: aiAnalysis?.negativeIndicators,
-          urlVerifications: aiAnalysis?.urlVerifications,
-        } : undefined,
+        initialAnalysis: preliminaryAnalysis
+          ? {
+              category: preliminaryAnalysis.category,
+              score: preliminaryAnalysis.score,
+              risk: preliminaryAnalysis.risk,
+              triggers: preliminaryAnalysis.triggers,
+              recommendation: preliminaryAnalysis.recommendation,
+              summary: preliminaryAnalysis.summary,
+              mainIndicators: aiAnalysis?.mainIndicators,
+              positiveIndicators: aiAnalysis?.positiveIndicators,
+              negativeIndicators: aiAnalysis?.negativeIndicators,
+              urlVerifications: aiAnalysis?.urlVerifications,
+            }
+          : undefined,
       };
 
       // Include image if we have one from step 1
@@ -893,7 +679,7 @@ export default function Home() {
           const reader = new FileReader();
           reader.onload = () => {
             const result = reader.result as string;
-            const base64Data = result.split(',')[1]; // Remove data:type;base64, prefix
+            const base64Data = result.split(",")[1]; // Remove data:type;base64, prefix
             resolve(base64Data);
           };
           reader.onerror = reject;
@@ -956,7 +742,7 @@ export default function Home() {
 
         // Update result with refined analysis
         const refinedResult = {
-          category: aiResult.category || "safe",
+          category: aiResult.category || "info",
           score: aiResult.fraudProbability || 0,
           risk: aiResult.riskLevel || "low",
           triggers:
@@ -1213,10 +999,7 @@ export default function Home() {
             stepperState.completedSteps.has(1)
           ) {
             stepperState.goToStep(2);
-          } else if (
-            stepId === 3 &&
-            stepperState.completedSteps.has(3)
-          ) {
+          } else if (stepId === 3 && stepperState.completedSteps.has(3)) {
             stepperState.goToStep(3);
           }
         }}
@@ -1233,6 +1016,8 @@ export default function Home() {
               imagePreview={imagePreview}
               setImagePreview={setImagePreview}
               isAnalyzing={isAnalyzing}
+              isProcessingImage={isProcessingImage}
+              ocrProgress={ocrProgress}
               onAnalyze={handleCheck}
               onImageUpload={handleFileChange}
               handlePaste={handlePaste}
@@ -1242,37 +1027,42 @@ export default function Home() {
 
             {/* Hidden Model Selector - Easter Egg */}
             {showModelSelector && (
-              <div style={{
-                marginTop: 'var(--spacing-small)',
-                marginBottom: 'var(--spacing-small)'
-              }}>
+              <div
+                style={{
+                  marginTop: "var(--spacing-small)",
+                  marginBottom: "var(--spacing-small)",
+                }}
+              >
                 {/* Admin Mode Indicator */}
-                <div style={{
-                  backgroundColor: 'var(--color-signal-orange)',
-                  color: 'white',
-                  padding: 'var(--spacing-x-small) var(--spacing-small)',
-                  borderRadius: '4px',
-                  marginBottom: 'var(--spacing-small)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: '0.875rem',
-                  fontWeight: 'bold'
-                }}>
+                <div
+                  style={{
+                    backgroundColor: "var(--color-signal-orange)",
+                    color: "white",
+                    padding: "var(--spacing-x-small) var(--spacing-small)",
+                    borderRadius: "4px",
+                    marginBottom: "var(--spacing-small)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    fontSize: "0.875rem",
+                    fontWeight: "bold",
+                  }}
+                >
                   <span>
-                    🔧 Admin Mode Active - Model: {selectedModel.split('/')[1] || selectedModel}
+                    🔧 Admin Mode Active - Model:{" "}
+                    {selectedModel.split("/")[1] || selectedModel}
                   </span>
                   <Button
                     size="small"
                     variant="tertiary"
-                    style={{ color: 'white', border: '1px solid white' }}
+                    style={{ color: "white", border: "1px solid white" }}
                     onClick={() => {
                       setShowModelSelector(false);
                       setSelectedModel(defaultModel);
                       setHasUserSelectedModel(false);
-                      localStorage.removeItem('selectedAIModel');
-                      setPendingModel('');
-                      setText(''); // Clear the rairai text
+                      localStorage.removeItem("selectedAIModel");
+                      setPendingModel("");
+                      setText(""); // Clear the rairai text
                     }}
                   >
                     Exit Admin Mode
@@ -1280,26 +1070,35 @@ export default function Home() {
                 </div>
 
                 {isLoadingModels ? (
-                  <div style={{
-                    padding: 'var(--spacing-medium)',
-                    textAlign: 'center'
-                  }}>
+                  <div
+                    style={{
+                      padding: "var(--spacing-medium)",
+                      textAlign: "center",
+                    }}
+                  >
                     <P>Laster tilgjengelige modeller...</P>
                   </div>
                 ) : availableModels.length > 0 ? (
-                  <div style={{
-                    backgroundColor: 'var(--color-white)',
-                    border: '1px solid var(--color-black-20)',
-                    borderRadius: '8px',
-                    padding: 'var(--spacing-medium)',
-                    marginBottom: 'var(--spacing-medium)'
-                  }}>
-                    <P style={{ marginBottom: 'var(--spacing-small)', fontWeight: 'bold' }}>
+                  <div
+                    style={{
+                      backgroundColor: "var(--color-white)",
+                      border: "1px solid var(--color-black-20)",
+                      borderRadius: "8px",
+                      padding: "var(--spacing-medium)",
+                      marginBottom: "var(--spacing-medium)",
+                    }}
+                  >
+                    <P
+                      style={{
+                        marginBottom: "var(--spacing-small)",
+                        fontWeight: "bold",
+                      }}
+                    >
                       AI Model Selection ({availableModels.length} available):
                     </P>
 
                     {/* Search input */}
-                    <div style={{ marginBottom: 'var(--spacing-small)' }}>
+                    <div style={{ marginBottom: "var(--spacing-small)" }}>
                       <Input
                         placeholder="Search models (e.g., gpt-4, claude, gemini)..."
                         value={modelFilter}
@@ -1308,130 +1107,194 @@ export default function Home() {
                         icon="search"
                         icon_position="left"
                         style={{
-                          width: '100%',
-                          '--input-border-color': 'var(--color-sea-green-30)',
-                          '--input-border-color-focus': 'var(--color-sea-green)',
-                          '--input-border-width': '2px'
+                          width: "100%",
+                          "--input-border-color": "var(--color-sea-green-30)",
+                          "--input-border-color-focus":
+                            "var(--color-sea-green)",
+                          "--input-border-width": "2px",
                         }}
                       />
                     </div>
 
                     {/* Current selection */}
-                    <div style={{
-                      marginBottom: 'var(--spacing-small)',
-                      padding: 'var(--spacing-small)',
-                      backgroundColor: 'var(--color-mint-green-12)',
-                      borderRadius: '4px',
-                      border: '1px solid var(--color-sea-green-30)'
-                    }}>
+                    <div
+                      style={{
+                        marginBottom: "var(--spacing-small)",
+                        padding: "var(--spacing-small)",
+                        backgroundColor: "var(--color-mint-green-12)",
+                        borderRadius: "4px",
+                        border: "1px solid var(--color-sea-green-30)",
+                      }}
+                    >
                       <P size="small" style={{ margin: 0 }}>
-                        <strong>Current:</strong> {(() => {
-                          const current = availableModels.find(m => m.id === selectedModel);
+                        <strong>Current:</strong>{" "}
+                        {(() => {
+                          const current = availableModels.find(
+                            (m) => m.id === selectedModel,
+                          );
                           if (!current) return selectedModel;
 
-                          let schemaSupport = '';
+                          let schemaSupport = "";
                           if (current.supportsNativeJSONSchema) {
-                            schemaSupport = ' 🎯 Native Schema';
+                            schemaSupport = " 🎯 Native Schema";
                           } else if (current.supportsStructuredOutput) {
-                            schemaSupport = ' 📋 Structured';
+                            schemaSupport = " 📋 Structured";
                           } else if (current.supportsJson) {
-                            schemaSupport = ' ✅ JSON';
+                            schemaSupport = " ✅ JSON";
                           }
 
-                          return `${current.name || current.id.split('/')[1]} (${current.provider})${schemaSupport}`;
+                          return `${current.name || current.id.split("/")[1]} (${current.provider})${schemaSupport}`;
                         })()}
                       </P>
                     </div>
 
                     {/* Model dropdown */}
-                    <div style={{
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                      border: '1px solid var(--color-black-20)',
-                      borderRadius: '4px'
-                    }}>
+                    <div
+                      style={{
+                        maxHeight: "200px",
+                        overflowY: "auto",
+                        border: "1px solid var(--color-black-20)",
+                        borderRadius: "4px",
+                      }}
+                    >
                       {availableModels
-                        .filter(model =>
-                          modelFilter === '' ||
-                          model.id.toLowerCase().includes(modelFilter.toLowerCase()) ||
-                          model.name?.toLowerCase().includes(modelFilter.toLowerCase()) ||
-                          model.provider?.toLowerCase().includes(modelFilter.toLowerCase())
+                        .filter(
+                          (model) =>
+                            modelFilter === "" ||
+                            model.id
+                              .toLowerCase()
+                              .includes(modelFilter.toLowerCase()) ||
+                            model.name
+                              ?.toLowerCase()
+                              .includes(modelFilter.toLowerCase()) ||
+                            model.provider
+                              ?.toLowerCase()
+                              .includes(modelFilter.toLowerCase()),
                         )
                         .slice(0, 50)
                         .map((model: any) => (
+                          <div
+                            key={model.id}
+                            style={{
+                              padding: "var(--spacing-small)",
+                              borderBottom: "1px solid var(--color-black-8)",
+                              cursor: "pointer",
+                              backgroundColor:
+                                selectedModel === model.id
+                                  ? "var(--color-sea-green-8)"
+                                  : "transparent",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                            onClick={() => {
+                              setSelectedModel(model.id);
+                              setHasUserSelectedModel(true);
+                              localStorage.setItem("selectedAIModel", model.id);
+                            }}
+                            onMouseEnter={(e) => {
+                              if (selectedModel !== model.id) {
+                                e.currentTarget.style.backgroundColor =
+                                  "var(--color-black-4)";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (selectedModel !== model.id) {
+                                e.currentTarget.style.backgroundColor =
+                                  "transparent";
+                              }
+                            }}
+                          >
+                            <div>
+                              <div
+                                style={{
+                                  fontWeight:
+                                    selectedModel === model.id
+                                      ? "bold"
+                                      : "normal",
+                                }}
+                              >
+                                {model.name ||
+                                  model.id.split("/")[1] ||
+                                  model.id}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "0.75rem",
+                                  color: "var(--color-black-60)",
+                                  marginTop: "2px",
+                                }}
+                              >
+                                {model.provider} • {model.cost || "unknown"}{" "}
+                                cost • {model.speed || "unknown"} speed
+                              </div>
+                            </div>
+                            <div style={{ fontSize: "0.75rem" }}>
+                              {model.supportsNativeJSONSchema && (
+                                <span title="Native JSON Schema Support">
+                                  🎯
+                                </span>
+                              )}
+                              {model.supportsStructuredOutput &&
+                                !model.supportsNativeJSONSchema && (
+                                  <span title="Structured Output Support">
+                                    📋
+                                  </span>
+                                )}
+                              {model.supportsJson &&
+                                !model.supportsStructuredOutput && (
+                                  <span title="Basic JSON Support">✅</span>
+                                )}
+                              {model.status === "verified" && (
+                                <span title="Verified working"> ⚡</span>
+                              )}
+                              {selectedModel === model.id && (
+                                <span
+                                  style={{ color: "var(--color-sea-green)" }}
+                                >
+                                  {" "}
+                                  ●
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+
+                      {availableModels.filter(
+                        (model) =>
+                          modelFilter === "" ||
+                          model.id
+                            .toLowerCase()
+                            .includes(modelFilter.toLowerCase()) ||
+                          model.name
+                            ?.toLowerCase()
+                            .includes(modelFilter.toLowerCase()) ||
+                          model.provider
+                            ?.toLowerCase()
+                            .includes(modelFilter.toLowerCase()),
+                      ).length > 50 && (
                         <div
-                          key={model.id}
                           style={{
-                            padding: 'var(--spacing-small)',
-                            borderBottom: '1px solid var(--color-black-8)',
-                            cursor: 'pointer',
-                            backgroundColor: selectedModel === model.id ? 'var(--color-sea-green-8)' : 'transparent',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}
-                          onClick={() => {
-                            setSelectedModel(model.id);
-                            setHasUserSelectedModel(true);
-                            localStorage.setItem('selectedAIModel', model.id);
-                          }}
-                          onMouseEnter={(e) => {
-                            if (selectedModel !== model.id) {
-                              e.currentTarget.style.backgroundColor = 'var(--color-black-4)';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (selectedModel !== model.id) {
-                              e.currentTarget.style.backgroundColor = 'transparent';
-                            }
+                            padding: "var(--spacing-small)",
+                            textAlign: "center",
+                            color: "var(--color-black-60)",
+                            fontSize: "0.875rem",
                           }}
                         >
-                          <div>
-                            <div style={{ fontWeight: selectedModel === model.id ? 'bold' : 'normal' }}>
-                              {model.name || model.id.split('/')[1] || model.id}
-                            </div>
-                            <div style={{
-                              fontSize: '0.75rem',
-                              color: 'var(--color-black-60)',
-                              marginTop: '2px'
-                            }}>
-                              {model.provider} • {model.cost || 'unknown'} cost • {model.speed || 'unknown'} speed
-                            </div>
-                          </div>
-                          <div style={{ fontSize: '0.75rem' }}>
-                            {model.supportsNativeJSONSchema && <span title="Native JSON Schema Support">🎯</span>}
-                            {model.supportsStructuredOutput && !model.supportsNativeJSONSchema && <span title="Structured Output Support">📋</span>}
-                            {model.supportsJson && !model.supportsStructuredOutput && <span title="Basic JSON Support">✅</span>}
-                            {model.status === 'verified' && <span title="Verified working"> ⚡</span>}
-                            {selectedModel === model.id && <span style={{ color: 'var(--color-sea-green)' }}> ●</span>}
-                          </div>
-                        </div>
-                      ))}
-
-                      {availableModels.filter(model =>
-                        modelFilter === '' ||
-                        model.id.toLowerCase().includes(modelFilter.toLowerCase()) ||
-                        model.name?.toLowerCase().includes(modelFilter.toLowerCase()) ||
-                        model.provider?.toLowerCase().includes(modelFilter.toLowerCase())
-                      ).length > 50 && (
-                        <div style={{
-                          padding: 'var(--spacing-small)',
-                          textAlign: 'center',
-                          color: 'var(--color-black-60)',
-                          fontSize: '0.875rem'
-                        }}>
                           Showing first 50 results. Use search to narrow down.
                         </div>
                       )}
                     </div>
                   </div>
                 ) : (
-                  <div style={{
-                    padding: 'var(--spacing-medium)',
-                    textAlign: 'center',
-                    border: '1px solid var(--color-black-20)',
-                    borderRadius: '8px'
-                  }}>
+                  <div
+                    style={{
+                      padding: "var(--spacing-medium)",
+                      textAlign: "center",
+                      border: "1px solid var(--color-black-20)",
+                      borderRadius: "8px",
+                    }}
+                  >
                     <P>Ingen modeller tilgjengelig</P>
                   </div>
                 )}
@@ -1443,27 +1306,32 @@ export default function Home() {
         {/* Step 2: Context Refinement */}
         {stepperState.currentStep === 2 && requiresRefinement && (
           <div className="input-card">
-            <div style={{
-              marginBottom: 'var(--spacing-large)',
-              textAlign: 'center'
-            }}>
-              <h2 style={{
-                color: 'var(--color-sea-green)',
-                fontSize: 'var(--font-size-x-large)',
-                fontWeight: 600,
-                margin: '0 0 var(--spacing-small) 0'
-              }}>
+            <div
+              style={{
+                marginBottom: "var(--spacing-large)",
+                textAlign: "center",
+              }}
+            >
+              <h2
+                style={{
+                  color: "var(--color-sea-green)",
+                  fontSize: "var(--font-size-x-large)",
+                  fontWeight: 600,
+                  margin: "0 0 var(--spacing-small) 0",
+                }}
+              >
                 Vi trenger mer informasjon
               </h2>
-              <p style={{
-                fontSize: 'var(--font-size-medium)',
-                color: 'var(--color-black-80)',
-                margin: 0
-              }}>
+              <p
+                style={{
+                  fontSize: "var(--font-size-medium)",
+                  color: "var(--color-black-80)",
+                  margin: 0,
+                }}
+              >
                 For å gi deg best mulig analyse, trenger vi litt mer kontekst
               </p>
             </div>
-
 
             {/* Context Refinement */}
             {aiAnalysis && aiAnalysis.followUpQuestions && (
@@ -1475,11 +1343,13 @@ export default function Home() {
             )}
 
             {/* Back to Step 1 button */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'center',
-              marginTop: 'var(--spacing-medium)'
-            }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                marginTop: "var(--spacing-medium)",
+              }}
+            >
               <Button
                 variant="tertiary"
                 onClick={() => stepperState.goToStep(1)}

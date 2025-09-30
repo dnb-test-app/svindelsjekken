@@ -9,7 +9,7 @@ export interface ParseResult<T> {
 }
 
 export interface FraudAnalysisResult {
-  category: 'fraud' | 'marketing' | 'suspicious' | 'safe' | 'context-required';
+  category: 'fraud' | 'marketing' | 'context-required' | 'info';
   riskLevel: 'low' | 'medium' | 'high';
   fraudProbability: number;
   mainIndicators: string[];

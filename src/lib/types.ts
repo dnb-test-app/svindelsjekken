@@ -10,7 +10,7 @@ export interface AnalysisResult {
   risk_level: 'low' | 'medium' | 'high';
   triggers: Trigger[];
   recommendations: string[];
-  category?: 'fraud' | 'marketing' | 'suspicious' | 'safe';
+  category?: 'fraud' | 'marketing' | 'context-required' | 'info';
   fraudProbability?: number;
   riskLevel?: 'low' | 'medium' | 'high';
   mainIndicators?: string[];
@@ -19,7 +19,7 @@ export interface AnalysisResult {
 }
 
 export interface APIAnalysisResponse {
-  category: 'fraud' | 'marketing' | 'suspicious' | 'safe';
+  category: 'fraud' | 'marketing' | 'context-required' | 'info';
   riskLevel: 'low' | 'medium' | 'high';
   fraudProbability: number;
   mainIndicators: string[];
@@ -27,4 +27,20 @@ export interface APIAnalysisResponse {
   summary: string;
   extractedText?: string;
   error?: string;
+}
+
+export interface AnalysisRequestContext {
+  imageData?: {
+    base64: string;
+    mimeType: string;
+  };
+  ocrText?: string;
+  additionalContext?: string;
+  questionAnswers?: Record<string, string>;
+}
+
+export interface AnalysisRequest {
+  text: string;
+  model?: string;
+  context?: AnalysisRequestContext;
 }

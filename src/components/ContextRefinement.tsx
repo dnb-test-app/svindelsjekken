@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react';
 import { Button, Textarea } from '@dnb/eufemia';
+import { ContextQuestion } from '@/lib/schemas/fraudAnalysis';
 
 interface ContextRefinementProps {
-  followUpQuestions: string[];
-  onRefineAnalysis: (questionAnswers: Record<string, 'yes' | 'no'>, additionalContext: string) => void;
+  followUpQuestions: ContextQuestion[] | string[]; // Support both new and old format for compatibility
+  onRefineAnalysis: (questionAnswers: Record<string, string>, additionalContext: string) => void; // Change to accept any string value, not just 'yes'/'no'
   isAnalyzing?: boolean;
 }
 
@@ -14,24 +15,37 @@ export default function ContextRefinement({
   onRefineAnalysis,
   isAnalyzing = false
 }: ContextRefinementProps) {
-  const [questionAnswers, setQuestionAnswers] = useState<Record<string, 'yes' | 'no'>>({});
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
   const [additionalContext, setAdditionalContext] = useState('');
 
-  const handleQuestionAnswer = (question: string, answer: 'yes' | 'no') => {
+  // Normalize questions to handle both old and new format
+  const normalizedQuestions: ContextQuestion[] = followUpQuestions.map(q => {
+    if (typeof q === 'string') {
+      // Old format - convert to new format with yes-no type
+      return {
+        question: q,
+        type: 'yes-no' as const
+      };
+    }
+    // New format - use as is
+    return q;
+  });
+
+  const handleQuestionAnswer = (questionText: string, answer: string) => {
     setQuestionAnswers(prev => ({
       ...prev,
-      [question]: answer
+      [questionText]: answer
     }));
   };
 
   const handleRefineAnalysis = () => {
-    const allQuestionsAnswered = followUpQuestions.length === Object.keys(questionAnswers).length;
+    const allQuestionsAnswered = normalizedQuestions.length === Object.keys(questionAnswers).length;
     if (allQuestionsAnswered) {
       onRefineAnalysis(questionAnswers, additionalContext);
     }
   };
 
-  const allQuestionsAnswered = followUpQuestions.length === Object.keys(questionAnswers).length;
+  const allQuestionsAnswered = normalizedQuestions.length === Object.keys(questionAnswers).length;
   const hasContext = allQuestionsAnswered;
 
   return (
@@ -88,8 +102,83 @@ export default function ContextRefinement({
             flexDirection: 'column',
             gap: 'var(--spacing-medium)'
           }}>
-            {followUpQuestions.map((question, index) => {
-              const currentAnswer = questionAnswers[question];
+            {normalizedQuestions.map((questionObj, index) => {
+              const currentAnswer = questionAnswers[questionObj.question];
+
+              const renderAnswerOptions = () => {
+                if (questionObj.type === 'yes-no') {
+                  // Render yes/no buttons (existing logic)
+                  return (
+                    <div style={{
+                      display: 'flex',
+                      gap: 'var(--spacing-small)'
+                    }}>
+                      <Button
+                        variant={currentAnswer === 'yes' ? 'primary' : 'secondary'}
+                        size="small"
+                        disabled={isAnalyzing}
+                        onClick={() => handleQuestionAnswer(questionObj.question, 'yes')}
+                        style={{
+                          minWidth: '80px',
+                          fontWeight: currentAnswer === 'yes' ? 600 : 400
+                        }}
+                      >
+                        <span style={{ marginRight: 'var(--spacing-x-small)' }}>
+                          {currentAnswer === 'yes' ? '✅' : '○'}
+                        </span>
+                        JA
+                      </Button>
+
+                      <Button
+                        variant={currentAnswer === 'no' ? 'primary' : 'secondary'}
+                        size="small"
+                        disabled={isAnalyzing}
+                        onClick={() => handleQuestionAnswer(questionObj.question, 'no')}
+                        style={{
+                          minWidth: '80px',
+                          fontWeight: currentAnswer === 'no' ? 600 : 400,
+                          backgroundColor: currentAnswer === 'no' ? 'var(--color-cherry-red)' : undefined,
+                          borderColor: currentAnswer === 'no' ? 'var(--color-cherry-red)' : undefined
+                        }}
+                      >
+                        <span style={{ marginRight: 'var(--spacing-x-small)' }}>
+                          {currentAnswer === 'no' ? '❌' : '○'}
+                        </span>
+                        NEI
+                      </Button>
+                    </div>
+                  );
+                } else if (questionObj.type === 'multiple-choice' && questionObj.options) {
+                  // Render multiple choice buttons
+                  return (
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 'var(--spacing-small)'
+                    }}>
+                      {questionObj.options.map((option, optionIndex) => (
+                        <Button
+                          key={optionIndex}
+                          variant={currentAnswer === option.value ? 'primary' : 'secondary'}
+                          size="small"
+                          disabled={isAnalyzing}
+                          onClick={() => handleQuestionAnswer(questionObj.question, option.value)}
+                          style={{
+                            minWidth: '80px',
+                            fontWeight: currentAnswer === option.value ? 600 : 400
+                          }}
+                        >
+                          <span style={{ marginRight: 'var(--spacing-x-small)' }}>
+                            {option.emoji ? option.emoji : (currentAnswer === option.value ? '✅' : '○')}
+                          </span>
+                          {option.label}
+                        </Button>
+                      ))}
+                    </div>
+                  );
+                }
+                return null;
+              };
 
               return (
                 <div
@@ -109,47 +198,10 @@ export default function ContextRefinement({
                     color: 'var(--color-black-80)',
                     lineHeight: 1.4
                   }}>
-                    {question}
+                    {questionObj.question}
                   </div>
 
-                  <div style={{
-                    display: 'flex',
-                    gap: 'var(--spacing-small)'
-                  }}>
-                    <Button
-                      variant={currentAnswer === 'yes' ? 'primary' : 'secondary'}
-                      size="small"
-                      disabled={isAnalyzing}
-                      onClick={() => handleQuestionAnswer(question, 'yes')}
-                      style={{
-                        minWidth: '80px',
-                        fontWeight: currentAnswer === 'yes' ? 600 : 400
-                      }}
-                    >
-                      <span style={{ marginRight: 'var(--spacing-x-small)' }}>
-                        {currentAnswer === 'yes' ? '✅' : '○'}
-                      </span>
-                      JA
-                    </Button>
-
-                    <Button
-                      variant={currentAnswer === 'no' ? 'primary' : 'secondary'}
-                      size="small"
-                      disabled={isAnalyzing}
-                      onClick={() => handleQuestionAnswer(question, 'no')}
-                      style={{
-                        minWidth: '80px',
-                        fontWeight: currentAnswer === 'no' ? 600 : 400,
-                        backgroundColor: currentAnswer === 'no' ? 'var(--color-cherry-red)' : undefined,
-                        borderColor: currentAnswer === 'no' ? 'var(--color-cherry-red)' : undefined
-                      }}
-                    >
-                      <span style={{ marginRight: 'var(--spacing-x-small)' }}>
-                        {currentAnswer === 'no' ? '❌' : '○'}
-                      </span>
-                      NEI
-                    </Button>
-                  </div>
+                  {renderAnswerOptions()}
                 </div>
               );
             })}

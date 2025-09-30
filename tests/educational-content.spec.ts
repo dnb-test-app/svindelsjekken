@@ -176,7 +176,7 @@ test.describe('Test Image Generation', () => {
       {
         name: 'legitimate-receipt.png',
         description: 'Image of legitimate receipt',
-        expectedCategory: 'safe',
+        expectedCategory: 'info',
         shouldHaveEducation: true
       }
     ];

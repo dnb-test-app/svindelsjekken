@@ -134,12 +134,12 @@ export function middleware(request: NextRequest) {
   // Content Security Policy
   const cspHeader = `
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:;
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://cdn.jsdelivr.net;
     style-src 'self' 'unsafe-inline';
     img-src 'self' data: blob: https:;
     font-src 'self' data:;
     worker-src 'self' blob:;
-    connect-src 'self' https://openrouter.ai https://api.dnb.no;
+    connect-src 'self' https://openrouter.ai https://api.dnb.no https://cdn.jsdelivr.net https://tessdata.projectnaptha.com;
     frame-ancestors 'none';
     base-uri 'self';
     form-action 'self';

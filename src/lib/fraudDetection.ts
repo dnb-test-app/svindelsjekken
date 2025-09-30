@@ -64,10 +64,11 @@ export function mentionsNorwegianBrands(text: string): boolean {
  */
 export function hasURLsNeedingVerification(text: string): boolean {
   // Import URL analyzer to check for minimal context
-  const { hasMinimalContext, extractURLs } = require('./urlAnalyzer');
+  const { hasMinimalContext, extractURLs, deduplicateURLsByDomain } = require('./urlAnalyzer');
 
-  // Extract URLs from text
-  const urls = extractURLs(text);
+  // Extract URLs from text and deduplicate by domain
+  const allUrls = extractURLs(text);
+  const urls = deduplicateURLsByDomain(allUrls);
 
   if (urls.length === 0) return false;
 
@@ -137,13 +138,19 @@ export function needsWebSearchVerification(text: string): boolean {
 /**
  * Get specific reasons why web search is recommended
  */
-export function getWebSearchReasons(text: string): string[] {
+export function getWebSearchReasons(text: string, context?: any): string[] {
   const reasons: string[] = [];
-  const { hasMinimalContext, extractURLs } = require('./urlAnalyzer');
+  const { hasMinimalContext, extractURLs, deduplicateURLsByDomain } = require('./urlAnalyzer');
+
+  // Check if image content is present
+  if (context?.imageData) {
+    reasons.push('Image content detected - may contain URLs, brands, or suspicious elements');
+  }
 
   if (hasURLsNeedingVerification(text)) {
     // Check if it's because of minimal context or suspicious patterns
-    const urls = extractURLs(text);
+    const allUrls = extractURLs(text);
+    const urls = deduplicateURLsByDomain(allUrls);
     if (urls.length > 0) {
       if (hasMinimalContext(text)) {
         reasons.push('URL with minimal context detected');

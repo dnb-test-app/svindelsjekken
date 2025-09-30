@@ -18,6 +18,8 @@ interface AnalysisStepProps {
   imagePreview: string | null;
   setImagePreview: (preview: string | null) => void;
   isAnalyzing: boolean;
+  isProcessingImage: boolean;
+  ocrProgress: number;
   onAnalyze: () => void;
   onImageUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
   handlePaste: (e: React.ClipboardEvent) => void;
@@ -31,13 +33,15 @@ export default function AnalysisStep({
   imagePreview,
   setImagePreview,
   isAnalyzing,
+  isProcessingImage,
+  ocrProgress,
   onAnalyze,
   onImageUpload,
   handlePaste,
   fileInputRef,
   onRemoveImage
 }: AnalysisStepProps) {
-  const isButtonDisabled = (text.trim().length < 5 && !imagePreview) || isAnalyzing;
+  const isButtonDisabled = (text.trim().length < 5 && !imagePreview) || isAnalyzing || isProcessingImage;
 
   // Show spinner when analyzing
   if (isAnalyzing) {
@@ -112,61 +116,87 @@ export default function AnalysisStep({
         {imagePreview && (
           <Space top="small">
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--spacing-small)',
-              padding: 'var(--spacing-small)',
+              position: 'relative',
+              overflow: 'hidden',
               backgroundColor: 'var(--color-mint-green-12)',
               border: '1px solid var(--color-sea-green-30)',
               borderRadius: 'var(--border-radius-small)'
             }}>
               <div style={{
-                width: '4rem',
-                height: '4rem',
-                borderRadius: 'var(--border-radius-small)',
-                overflow: 'hidden',
-                flexShrink: 0,
-                border: '1px solid var(--color-sea-green-30)'
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--spacing-small)',
+                padding: 'var(--spacing-small)',
               }}>
-                <img
-                  src={imagePreview}
-                  alt="Opplastet bilde"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover'
-                  }}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
                 <div style={{
-                  fontSize: 'var(--font-size-basis)',
-                  fontWeight: 600,
-                  color: 'var(--color-sea-green)',
-                  marginBottom: '2px'
-                }}>
-                  📎 Bilde er lastet opp
-                </div>
-                <div style={{
-                  fontSize: 'var(--font-size-small)',
-                  color: 'var(--color-black-60)'
-                }}>
-                  Bildet vil bli analysert sammen med teksten din
-                </div>
-              </div>
-              <Button
-                variant="tertiary"
-                size="small"
-                onClick={onRemoveImage}
-                icon="close"
-                style={{
+                  width: '4rem',
+                  height: '4rem',
+                  borderRadius: 'var(--border-radius-small)',
+                  overflow: 'hidden',
                   flexShrink: 0,
-                  minWidth: 'auto',
-                  padding: 'var(--spacing-x-small)'
-                }}
-              >
-                Fjern
-              </Button>
+                  border: '1px solid var(--color-sea-green-30)'
+                }}>
+                  <img
+                    src={imagePreview}
+                    alt="Opplastet bilde"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover'
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{
+                    fontSize: 'var(--font-size-basis)',
+                    fontWeight: 600,
+                    color: 'var(--color-sea-green)',
+                    marginBottom: '2px'
+                  }}>
+                    {isProcessingImage ? '🔄 Leser tekst fra bilde...' : '📎 Bildet er lastet opp'}
+                  </div>
+                  {!isProcessingImage && (
+                    <div style={{
+                      fontSize: 'var(--font-size-small)',
+                      color: 'var(--color-black-60)'
+                    }}>
+                      Bildet vil bli analysert sammen med teksten din
+                    </div>
+                  )}
+                </div>
+                <Button
+                  variant="tertiary"
+                  size="small"
+                  onClick={onRemoveImage}
+                  icon="close"
+                  style={{
+                    flexShrink: 0,
+                    minWidth: 'auto',
+                    padding: 'var(--spacing-x-small)'
+                  }}
+                >
+                  Fjern
+                </Button>
+              </div>
+              {/* Progress bar */}
+              {isProcessingImage && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: '3px',
+                  backgroundColor: 'var(--color-sea-green-30)',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${ocrProgress}%`,
+                    backgroundColor: 'var(--color-sea-green)',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+              )}
             </div>
           </Space>
         )}
