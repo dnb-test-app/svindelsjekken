@@ -110,24 +110,6 @@ export default function URLStatusCard({
 
   return (
     <Card spacing="medium" style={{ marginBottom: 'var(--spacing-large)' }}>
-      {/* Category Display - Only show if we have a category */}
-      {category && (() => {
-        const categoryInfo = getCategoryInfo();
-        return (
-          <div style={{ marginBottom: 'var(--spacing-large)' }}>
-            <P size="large" style={{
-              margin: 0,
-              fontWeight: 600,
-              color: 'var(--color-black)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
-              {categoryInfo.text}
-            </P>
-          </div>
-        );
-      })()}
 
       <Heading size="medium" level="3" style={{
         margin: '0 0 var(--spacing-small) 0',
@@ -224,7 +206,6 @@ export default function URLStatusCard({
           );
         })}
       </div>
-
     </Card>
   );
 }

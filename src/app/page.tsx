@@ -15,23 +15,39 @@ import ContextRefinement from "@/components/ContextRefinement";
 import Stepper, { useStepperState } from "@/components/Stepper";
 import AnalysisStep from "@/components/AnalysisStep";
 import ResultsStep from "@/components/ResultsStep";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { isMinimalContextURL } from "@/lib/urlAnalyzer";
 import {
   needsWebSearchVerification,
   getWebSearchReasons,
 } from "@/lib/fraudDetection";
-import { runOCR, type OCRProgress } from "@/lib/ocr";
+import { fileToBase64 } from "@/lib/utils/fileHelpers";
+import { getModelName } from "@/lib/utils/modelHelpers";
+import {
+  prepareImageData,
+  checkWebVerificationNeeds,
+  buildAnalysisContext,
+  createErrorResult,
+  createInsufficientTextResult,
+  transformAIResult,
+  requiresContextRefinement,
+  hasSufficientInput,
+} from "@/lib/utils/analysisHelpers";
+import { useImageUpload } from "@/hooks/useImageUpload";
+import { useAnalysisState } from "@/hooks/useAnalysisState";
+import { FILE_UPLOAD, ANALYSIS, STORAGE_KEYS, UI, APP } from "@/lib/constants/appConstants";
 
 export default function Home() {
-  const [text, setText] = useState("");
-  const [result, setResult] = useState<any>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  // Custom hooks for state management
+  const imageUpload = useImageUpload();
+  const analysisState = useAnalysisState();
+
+  // Model selection states
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [selectedModel, setSelectedModel] = useState("openai/gpt-5-mini");
   const [defaultModel, setDefaultModel] = useState("openai/gpt-5-mini");
   const [hasUserSelectedModel, setHasUserSelectedModel] = useState(false);
   const [pendingModel, setPendingModel] = useState<string>("");
-  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
 
   // Stepper states
   const stepperState = useStepperState();
@@ -49,26 +65,10 @@ export default function Home() {
   const [batchTesting, setBatchTesting] = useState(false);
   const [modelFilter, setModelFilter] = useState("");
 
-  // Image upload states
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [ocrText, setOcrText] = useState<string>("");
-  const [isProcessingImage, setIsProcessingImage] = useState(false);
-  const [ocrProgress, setOcrProgress] = useState<number>(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // URL detection states
-  const [urlDetected, setUrlDetected] = useState(false);
-  const [additionalContext, setAdditionalContext] = useState("");
-
-  // Web verification states
-  const [isWebVerifying, setIsWebVerifying] = useState(false);
-
   // Load saved model preference and test results
   useEffect(() => {
     // Load test results from localStorage
-    const savedTestResults = localStorage.getItem("modelTestResults");
+    const savedTestResults = localStorage.getItem(STORAGE_KEYS.MODEL_TEST_RESULTS);
     if (savedTestResults) {
       try {
         setModelTestResults(JSON.parse(savedTestResults));
@@ -83,7 +83,7 @@ export default function Home() {
         const apiDefaultModel = data.defaultModel || "openai/gpt-5-mini";
         setDefaultModel(apiDefaultModel);
 
-        const saved = localStorage.getItem("selectedAIModel");
+        const saved = localStorage.getItem(STORAGE_KEYS.SELECTED_MODEL);
         const selectedModelId = saved || apiDefaultModel;
         setSelectedModel(selectedModelId);
         setHasUserSelectedModel(saved !== null && saved !== apiDefaultModel);
@@ -93,7 +93,7 @@ export default function Home() {
         const fallbackDefault = "openai/gpt-5-mini";
         setDefaultModel(fallbackDefault);
 
-        const saved = localStorage.getItem("selectedAIModel");
+        const saved = localStorage.getItem(STORAGE_KEYS.SELECTED_MODEL);
         const selectedModelId = saved || fallbackDefault;
         setSelectedModel(selectedModelId);
         setHasUserSelectedModel(saved !== null && saved !== fallbackDefault);
@@ -125,7 +125,7 @@ export default function Home() {
 
             // Store in localStorage for quick loading
             localStorage.setItem(
-              "cachedModels",
+              STORAGE_KEYS.CACHED_MODELS,
               JSON.stringify({
                 timestamp: data.timestamp,
                 models: data.models,
@@ -138,7 +138,7 @@ export default function Home() {
             );
             if (!currentModelAvailable && data.recommended) {
               setSelectedModel(data.recommended.id);
-              localStorage.setItem("selectedAIModel", data.recommended.id);
+              localStorage.setItem(STORAGE_KEYS.SELECTED_MODEL, data.recommended.id);
             }
           }
         } else {
@@ -155,465 +155,120 @@ export default function Home() {
 
   // Easter egg: Check for "RaiRai" in text
   useEffect(() => {
-    if (text.toLowerCase().includes("rairai") && !showModelSelector) {
+    if (analysisState.text.toLowerCase().includes("rairai") && !showModelSelector) {
       setShowModelSelector(true);
       fetchAvailableModels(); // Fetch models when admin mode is activated
     }
-  }, [text, showModelSelector, fetchAvailableModels]);
+  }, [analysisState.text, showModelSelector, fetchAvailableModels]);
 
   // URL detection: Check if input contains URLs with minimal context
   useEffect(() => {
-    const hasMinimalContextURL = isMinimalContextURL(text.trim());
-    setUrlDetected(hasMinimalContextURL);
-  }, [text]);
-
-  // Compress image for better upload reliability (especially for iPhone)
-  const compressImage = useCallback(async (file: File): Promise<File> => {
-    return new Promise((resolve, reject) => {
-      // Detect HEIC/HEIF format (common in fresh iPhone screenshots)
-      const isHEIC =
-        file.type === "image/heic" ||
-        file.type === "image/heif" ||
-        file.name.toLowerCase().endsWith(".heic") ||
-        file.name.toLowerCase().endsWith(".heif");
-
-      // If HEIC or already small enough (under 2MB), don't compress
-      if (isHEIC || file.size < 2 * 1024 * 1024) {
-        console.log(
-          `Skipping compression: ${isHEIC ? "HEIC format" : "File already small"} (${(file.size / 1024 / 1024).toFixed(2)}MB)`,
-        );
-        resolve(file);
-        return;
-      }
-
-      // Set a timeout to fallback to original if compression takes too long
-      const compressionTimeout = setTimeout(() => {
-        console.warn("Image compression timeout - using original file");
-        resolve(file);
-      }, 10000); // 10 second timeout
-
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      const img = new Image();
-
-      // Handle image load errors (common with unsupported formats)
-      img.onerror = (error) => {
-        clearTimeout(compressionTimeout);
-        console.warn("Image load failed, using original file:", error);
-        resolve(file); // Return original file on error
-      };
-
-      img.onload = () => {
-        clearTimeout(compressionTimeout);
-
-        try {
-          // Calculate new dimensions (max 1920px width)
-          const maxWidth = 1920;
-          const maxHeight = 1080;
-          let { width, height } = img;
-
-          if (width > maxWidth) {
-            height = (height * maxWidth) / width;
-            width = maxWidth;
-          }
-          if (height > maxHeight) {
-            width = (width * maxHeight) / height;
-            height = maxHeight;
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-
-          // Draw and compress
-          if (!ctx) {
-            console.warn("Canvas context not available, using original file");
-            resolve(file);
-            return;
-          }
-
-          ctx.drawImage(img, 0, 0, width, height);
-
-          canvas.toBlob(
-            (blob) => {
-              if (blob && blob.size < file.size) {
-                const compressedFile = new File(
-                  [blob],
-                  file.name.replace(/\.(heic|heif)$/i, ".jpg"),
-                  {
-                    type: "image/jpeg",
-                    lastModified: Date.now(),
-                  },
-                );
-                console.log(
-                  `Compression successful: ${(file.size / 1024 / 1024).toFixed(2)}MB -> ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-                );
-                resolve(compressedFile);
-              } else {
-                console.log("Compressed file not smaller, using original");
-                resolve(file); // Use original if compression didn't help
-              }
-            },
-            "image/jpeg",
-            0.85, // 85% quality for better balance
-          );
-        } catch (error) {
-          console.error("Canvas processing error:", error);
-          resolve(file); // Fallback to original on any error
-        }
-      };
-
-      // Create object URL and clean up after use
-      const objectUrl = URL.createObjectURL(file);
-      img.src = objectUrl;
-
-      // Clean up object URL after image loads or errors
-      img.addEventListener("load", () => URL.revokeObjectURL(objectUrl), {
-        once: true,
-      });
-      img.addEventListener("error", () => URL.revokeObjectURL(objectUrl), {
-        once: true,
-      });
-    });
-  }, []);
+    const hasMinimalContextURL = isMinimalContextURL(analysisState.text.trim());
+    analysisState.setUrlDetected(hasMinimalContextURL);
+  }, [analysisState.text]);
 
 
-  // Store file and run OCR for images
-  const storeFile = useCallback(async (file: File) => {
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      alert("Filen er for stor. Maksimal størrelse er 10MB.");
+  const handleCheck = async () => {
+    // Initialize state
+    analysisState.setIsAnalyzing(true);
+    analysisState.setAiAnalysis(null);
+    analysisState.setResult(null);
+
+    // Clean text for API
+    const analysisText = analysisState.text.replace(/rairai/gi, "").trim();
+
+    // Prepare image data if file was uploaded
+    const imageData = await prepareImageData(imageUpload.uploadedFile, imageUpload.setOcrProgress);
+
+    // Check if web verification is needed
+    const { needsVerification, reasons } = checkWebVerificationNeeds(analysisText);
+    if (needsVerification) {
+      analysisState.setIsWebVerifying(true);
+    }
+
+    // Update progress for images
+    if (imageData) {
+      imageUpload.setOcrProgress(70);
+    }
+
+    // Validate sufficient input
+    if (!hasSufficientInput(analysisText, imageData)) {
+      analysisState.setResult(createInsufficientTextResult());
+      analysisState.setIsAnalyzing(false);
+      analysisState.setIsWebVerifying(false);
+      imageUpload.setOcrProgress(0);
       return;
     }
 
-    // Store the file for later analysis
-    setUploadedFile(file);
+    // Prepare analysis request
+    try {
+      const baseModel = typeof selectedModel === "string" ? selectedModel : defaultModel;
+      const modelToUse = needsVerification ? `${baseModel}:online` : baseModel;
+      const context = buildAnalysisContext(imageData, imageUpload.ocrText, analysisState.additionalContext, analysisState.urlDetected);
 
-    // Show preview and run OCR for images
-    if (file.type.startsWith("image/")) {
-      // Show preview
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setImagePreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-
-      // Run OCR in background
-      setIsProcessingImage(true);
-      setOcrProgress(0);
-
-      const extractedText = await runOCR(file, (progress: OCRProgress) => {
-        setOcrProgress(Math.round(progress.progress * 100));
+      // Call analysis API
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: analysisText,
+          model: modelToUse,
+          context,
+        }),
       });
 
-      setOcrText(extractedText);
-      setIsProcessingImage(false);
-      setOcrProgress(100);
-    }
-  }, []);
+      // Handle API errors
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("API error:", errorText);
 
-  // Handle file input change
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      storeFile(file);
-    }
-  };
+        const { result: errorResult, error: errorMsg } = createErrorResult(response.status);
+        analysisState.setResult(errorResult);
+        analysisState.setAiAnalysis({ error: errorMsg });
+      } else {
+        // Process successful response
+        const aiResult = await response.json();
+        analysisState.setAiAnalysis(aiResult);
 
-  // Handle drag and drop
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
-      storeFile(file);
-    }
-  };
-
-  // Handle paste
-  const handlePaste = useCallback(
-    (e: React.ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.startsWith("image/")) {
-          const file = items[i].getAsFile();
-          if (file) {
-            storeFile(file);
-            e.preventDefault();
-            break;
-          }
-        }
-      }
-    },
-    [storeFile],
-  );
-
-  // Global paste handler for document
-  useEffect(() => {
-    const handleGlobalPaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.startsWith("image/")) {
-          const file = items[i].getAsFile();
-          if (file) {
-            storeFile(file);
-            e.preventDefault();
-            break;
-          }
-        }
-      }
-    };
-
-    document.addEventListener("paste", handleGlobalPaste);
-    return () => document.removeEventListener("paste", handleGlobalPaste);
-  }, [storeFile]);
-
-  // Handle removing uploaded image and file
-  const handleRemoveImage = () => {
-    setImagePreview(null);
-    setUploadedFile(null);
-    setOcrText("");
-    setOcrProgress(0);
-  };
-
-  const handleCheck = async () => {
-    setIsAnalyzing(true);
-    setAiAnalysis(null);
-    setResult(null); // Clear previous results
-
-    // Clean text for API
-    let analysisText = text.replace(/rairai/gi, "").trim();
-    let imageData = null;
-
-    // If we have an uploaded file, convert it to base64
-    if (uploadedFile) {
-      setOcrProgress(10);
-      try {
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            const base64Data = result.split(",")[1]; // Remove data:type;base64, prefix
-            resolve(base64Data);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(uploadedFile);
-        });
-
-        imageData = {
-          base64: base64,
-          mimeType: uploadedFile.type,
-        };
-        setOcrProgress(50);
-      } catch (error) {
-        console.error("Failed to convert image:", error);
-        setOcrProgress(0);
-      }
-    }
-
-
-    // Check if we need web verification
-    const needsWebVerification = needsWebSearchVerification(analysisText);
-    const webReasons = needsWebVerification
-      ? getWebSearchReasons(analysisText)
-      : [];
-
-    if (needsWebVerification) {
-      console.log("Web verification needed:", webReasons);
-      setIsWebVerifying(true);
-    }
-
-    // Set progress for images
-    if (imageData) {
-      setOcrProgress(70);
-    }
-
-    // Try AI analysis if we have sufficient text OR an image
-    if (analysisText.length >= 5 || imageData) {
-      try {
-        const baseModel =
-          typeof selectedModel === "string" ? selectedModel : defaultModel;
-        const modelToUse = needsWebVerification
-          ? `${baseModel}:online`
-          : baseModel;
-
-        // Prepare context object
-        const contextData: any = {};
-
-        // Add image data if available
         if (imageData) {
-          contextData.imageData = imageData;
+          imageUpload.setOcrProgress(100);
         }
 
-        // Add OCR text if extracted
-        if (ocrText) {
-          contextData.ocrText = ocrText;
-        }
+        // Transform AI result to analysis format
+        const analysisResult = transformAIResult(aiResult);
 
-        // Add additional context for URLs
-        if (urlDetected && additionalContext.trim()) {
-          contextData.additionalContext = additionalContext.trim();
-        }
-
-        const response = await fetch("/api/analyze", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            text: analysisText,
-            model: modelToUse,
-            context:
-              Object.keys(contextData).length > 0 ? contextData : undefined,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("API error:", errorText);
-
-          // Check if it's a rate limit error
-          let errorMessage = "AI-analyse utilgjengelig.";
-          let recommendation = "Analyse utilgjengelig - vær ekstra forsiktig";
-          let summary =
-            "Kunne ikke analysere innholdet på grunn av tekniske problemer";
-
-          if (response.status === 429) {
-            errorMessage =
-              "For mange forespørsler. Vennligst vent et øyeblikk og prøv igjen.";
-            recommendation =
-              "Vent og prøv igjen - vær ekstra forsiktig i mellomtiden";
-            summary = "Midlertidig utilgjengelig på grunn av høy trafikk";
-          }
-
-          // AI failed, use error category to warn user
-          setResult({
-            category: "error",
-            score: 0,
-            risk: "unknown",
-            triggers: [],
-            categories: [],
-            fallbackMode: true,
-            recommendation: recommendation,
-            summary: summary,
-            retryable: response.status === 429,
-          });
-          setAiAnalysis({
-            error: errorMessage,
-          });
+        // Handle context refinement if needed
+        if (requiresContextRefinement(aiResult)) {
+          setPreliminaryAnalysis(analysisResult);
+          setRequiresRefinement(true);
+          stepperState.markStepCompleted(1);
+          stepperState.goToStep(2);
         } else {
-          const aiResult = await response.json();
-          setAiAnalysis(aiResult);
-
-          // Complete progress for images
-          if (imageData) {
-            setOcrProgress(100);
-          }
-
-          // Use AI-based risk assessment with categories
-          const analysisResult = {
-            category: aiResult.category || "info",
-            score: aiResult.fraudProbability || 0,
-            risk: aiResult.riskLevel || "low",
-            triggers:
-              aiResult.mainIndicators?.map((ind: string) => ({
-                pattern: ind,
-                category: "ai_detected",
-                weight: 10,
-              })) || [],
-            categories: ["ai_analysis"],
-            aiEnhanced: true,
-            recommendation: aiResult.recommendation,
-            summary: aiResult.summary,
-            educationalContext: aiResult.educationalContext || null,
-            verificationGuide: aiResult.verificationGuide || null,
-            actionableSteps: aiResult.actionableSteps || [],
-          };
-
-          // Check if context refinement is needed
-          const needsRefinement =
-            aiResult.category === "context-required" ||
-            (aiResult.followUpQuestions &&
-              aiResult.followUpQuestions.length > 0);
-
-          if (needsRefinement) {
-            // Store preliminary analysis and advance to Step 2
-            setPreliminaryAnalysis(analysisResult);
-            setRequiresRefinement(true);
-            stepperState.markStepCompleted(1);
-            stepperState.goToStep(2);
-          } else {
-            // No context refinement needed, go directly to Step 3
-            setResult(analysisResult);
-            setRequiresRefinement(false);
-            stepperState.markStepCompleted(1);
-            stepperState.markStepCompleted(2);
-            stepperState.goToStep(3);
-          }
+          analysisState.setResult(analysisResult);
+          setRequiresRefinement(false);
+          stepperState.markStepCompleted(1);
+          stepperState.markStepCompleted(2);
+          stepperState.goToStep(3);
         }
-      } catch (error: any) {
-        console.error("AI analysis failed:", error);
-
-        // AI failed, use error category to warn user
-        setResult({
-          category: "error",
-          score: 0,
-          risk: "unknown",
-          triggers: [],
-          categories: [],
-          fallbackMode: true,
-          recommendation: "Analyse feilet - vær ekstra forsiktig",
-          summary:
-            "Kunne ikke analysere innholdet på grunn av tekniske problemer",
-        });
-        setAiAnalysis({
-          error: "AI-analyse feilet.",
-        });
       }
-    } else {
-      // NEVER fallback to 'safe' - if text is too short, it's an error state
-      setResult({
-        category: "error",
-        score: 50, // Default to medium risk, not safe
-        risk: "medium",
-        triggers: ["Tekst for kort"],
-        categories: ["Utilstrekkelig input"],
-        fallbackMode: true,
-        recommendation: "Tekst for kort for pålitelig analyse - vær forsiktig",
-        summary: "Minimum 5 tegn kreves for sikker analyse",
-      });
+    } catch (error: any) {
+      console.error("AI analysis failed:", error);
+
+      const { result: errorResult, error: errorMsg } = createErrorResult();
+      analysisState.setResult(errorResult);
+      analysisState.setAiAnalysis({ error: errorMsg });
     }
 
-    setIsAnalyzing(false);
-    setIsWebVerifying(false);
-    setOcrProgress(0);
+    // Cleanup
+    analysisState.setIsAnalyzing(false);
+    analysisState.setIsWebVerifying(false);
+    imageUpload.setOcrProgress(0);
   };
 
   // Reset all states for new analysis
   const handleNewAnalysis = () => {
-    setText("");
-    setResult(null);
-    setAiAnalysis(null);
-    setImagePreview(null);
-    setOcrProgress(0);
-    setUploadedFile(null);
-    setUrlDetected(false);
-    setAdditionalContext("");
-    setIsWebVerifying(false);
+    analysisState.resetAnalysis();
+    imageUpload.handleRemoveImage();
     setPreliminaryAnalysis(null);
     setRequiresRefinement(false);
     stepperState.setCurrentStep(1);
@@ -623,40 +278,36 @@ export default function Home() {
   };
 
   const handleRefineAnalysis = async (
-    questionAnswers: Record<string, string>, // Updated to accept any string value, not just 'yes'/'no'
+    questionAnswers: Record<string, string>,
     refinementContext: string,
   ) => {
     // Allow refinement if we have either sufficient text OR an image
-    if ((!text || text.trim().length < 5) && !imagePreview) return;
+    if ((!analysisState.text || analysisState.text.trim().length < ANALYSIS.MIN_TEXT_LENGTH) && !imageUpload.imagePreview) return;
 
-    setIsAnalyzing(true);
-    setAiAnalysis(null);
+    analysisState.setIsAnalyzing(true);
+    analysisState.setAiAnalysis(null);
 
     // Immediately advance to Step 3 to show loading state
     stepperState.markStepCompleted(2);
     stepperState.goToStep(3);
 
     // Clean text for API
-    const cleanedText = text.replace(/rairai/gi, "").trim();
-
-    // Server will handle OCR extraction from images
+    const cleanedText = analysisState.text.replace(/rairai/gi, "").trim();
     const refinedText = cleanedText;
 
     try {
-      const modelToUse =
-        typeof selectedModel === "string" ? selectedModel : defaultModel;
+      const modelToUse = typeof selectedModel === "string" ? selectedModel : defaultModel;
 
       // Combine URL context with refinement context
       let combinedContext = refinementContext;
-      if (urlDetected && additionalContext.trim()) {
-        combinedContext = `Kontekst for lenke: ${additionalContext.trim()}\n\nYtterligere informasjon: ${refinementContext}`;
+      if (analysisState.urlDetected && analysisState.additionalContext.trim()) {
+        combinedContext = `Kontekst for lenke: ${analysisState.additionalContext.trim()}\n\nYtterligere informasjon: ${refinementContext}`;
       }
 
       // Prepare context with image, OCR, and initial results
       const contextData: any = {
         questionAnswers,
         additionalContext: combinedContext,
-        // Include the preliminary analysis results
         initialAnalysis: preliminaryAnalysis
           ? {
               category: preliminaryAnalysis.category,
@@ -665,38 +316,26 @@ export default function Home() {
               triggers: preliminaryAnalysis.triggers,
               recommendation: preliminaryAnalysis.recommendation,
               summary: preliminaryAnalysis.summary,
-              mainIndicators: aiAnalysis?.mainIndicators,
-              positiveIndicators: aiAnalysis?.positiveIndicators,
-              negativeIndicators: aiAnalysis?.negativeIndicators,
-              urlVerifications: aiAnalysis?.urlVerifications,
+              mainIndicators: analysisState.aiAnalysis?.mainIndicators,
+              positiveIndicators: analysisState.aiAnalysis?.positiveIndicators,
+              negativeIndicators: analysisState.aiAnalysis?.negativeIndicators,
+              urlVerifications: analysisState.aiAnalysis?.urlVerifications,
             }
           : undefined,
       };
 
       // Include image if we have one from step 1
-      if (uploadedFile) {
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            const base64Data = result.split(",")[1]; // Remove data:type;base64, prefix
-            resolve(base64Data);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(uploadedFile);
-        });
-
+      if (imageUpload.uploadedFile) {
+        const base64 = await fileToBase64(imageUpload.uploadedFile);
         contextData.imageData = {
           base64: base64,
-          mimeType: uploadedFile.type,
+          mimeType: imageUpload.uploadedFile.type,
         };
       }
 
       const response = await fetch("/api/analyze", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: refinedText,
           model: modelToUse,
@@ -708,67 +347,59 @@ export default function Home() {
         const errorText = await response.text();
         console.error("Refined analysis API error:", errorText);
 
-        // Handle error similar to original handleCheck
         let errorMessage = "AI-analyse utilgjengelig.";
         let recommendation = "Analyse utilgjengelig - vær ekstra forsiktig";
-        let summary =
-          "Kunne ikke analysere innholdet på grunn av tekniske problemer";
+        let summary = "Kunne ikke analysere innholdet på grunn av tekniske problemer";
 
         if (response.status === 429) {
-          errorMessage =
-            "For mange forespørsler. Vennligst vent et øyeblikk og prøv igjen.";
-          recommendation =
-            "Vent og prøv igjen - vær ekstra forsiktig i mellomtiden";
+          errorMessage = "For mange forespørsler. Vennligst vent et øyeblikk og prøv igjen.";
+          recommendation = "Vent og prøv igjen - vær ekstra forsiktig i mellomtiden";
           summary = "Midlertidig utilgjengelig på grunn av høy trafikk";
         }
 
-        setResult({
+        analysisState.setResult({
           category: "error",
           score: 0,
           risk: "unknown",
           triggers: [],
           categories: [],
           fallbackMode: true,
-          recommendation: recommendation,
-          summary: summary,
+          recommendation,
+          summary,
           retryable: response.status === 429,
         });
-        setAiAnalysis({
-          error: errorMessage,
-        });
+        analysisState.setAiAnalysis({ error: errorMessage });
       } else {
         const aiResult = await response.json();
-        setAiAnalysis(aiResult);
+        analysisState.setAiAnalysis(aiResult);
 
-        // Update result with refined analysis
         const refinedResult = {
           category: aiResult.category || "info",
           score: aiResult.fraudProbability || 0,
           risk: aiResult.riskLevel || "low",
-          triggers:
-            aiResult.mainIndicators?.map((ind: string) => ({
-              pattern: ind,
-              category: "ai_detected",
-              weight: 10,
-            })) || [],
+          triggers: aiResult.mainIndicators?.map((ind: string) => ({
+            pattern: ind,
+            category: "ai_detected",
+            weight: 10,
+          })) || [],
           categories: ["ai_analysis"],
           aiEnhanced: true,
           recommendation: aiResult.recommendation,
           summary: aiResult.summary,
-          refined: true, // Mark as refined analysis
+          refined: true,
           educationalContext: aiResult.educationalContext || null,
           verificationGuide: aiResult.verificationGuide || null,
           smartQuestions: aiResult.smartQuestions || [],
         };
 
-        setResult(refinedResult);
+        analysisState.setResult(refinedResult);
         setRequiresRefinement(false);
         stepperState.markStepCompleted(3);
       }
     } catch (error: any) {
       console.error("Refined AI analysis failed:", error);
 
-      setResult({
+      analysisState.setResult({
         category: "error",
         score: 0,
         risk: "unknown",
@@ -776,16 +407,13 @@ export default function Home() {
         categories: [],
         fallbackMode: true,
         recommendation: "Analyse feilet - vær ekstra forsiktig",
-        summary:
-          "Kunne ikke analysere innholdet på grunn av tekniske problemer",
+        summary: "Kunne ikke analysere innholdet på grunn av tekniske problemer",
       });
-      setAiAnalysis({
-        error: "AI-analyse feilet.",
-      });
+      analysisState.setAiAnalysis({ error: "AI-analyse feilet." });
     }
 
-    setIsAnalyzing(false);
-    setIsWebVerifying(false);
+    analysisState.setIsAnalyzing(false);
+    analysisState.setIsWebVerifying(false);
   };
 
   const handleModelChange = (e: any) => {
@@ -815,7 +443,7 @@ export default function Home() {
     if (pendingModel) {
       setSelectedModel(pendingModel);
       setHasUserSelectedModel(pendingModel !== defaultModel);
-      localStorage.setItem("selectedAIModel", pendingModel);
+      localStorage.setItem(STORAGE_KEYS.SELECTED_MODEL, pendingModel);
       setPendingModel("");
     }
   };
@@ -854,7 +482,7 @@ export default function Home() {
         };
 
         setModelTestResults(newResults);
-        localStorage.setItem("modelTestResults", JSON.stringify(newResults));
+        localStorage.setItem(STORAGE_KEYS.MODEL_TEST_RESULTS, JSON.stringify(newResults));
 
         // Update available models with test result
         setAvailableModels((prev) =>
@@ -923,7 +551,7 @@ export default function Home() {
         });
 
         setModelTestResults(newResults);
-        localStorage.setItem("modelTestResults", JSON.stringify(newResults));
+        localStorage.setItem(STORAGE_KEYS.MODEL_TEST_RESULTS, JSON.stringify(newResults));
 
         // Update available models with test results
         setAvailableModels((prev) =>
@@ -1010,20 +638,22 @@ export default function Home() {
         {/* Step 1: Analysis Input */}
         {stepperState.currentStep === 1 && (
           <div className="input-card">
-            <AnalysisStep
-              text={text}
-              setText={setText}
-              imagePreview={imagePreview}
-              setImagePreview={setImagePreview}
-              isAnalyzing={isAnalyzing}
-              isProcessingImage={isProcessingImage}
-              ocrProgress={ocrProgress}
-              onAnalyze={handleCheck}
-              onImageUpload={handleFileChange}
-              handlePaste={handlePaste}
-              fileInputRef={fileInputRef}
-              onRemoveImage={handleRemoveImage}
-            />
+            <ErrorBoundary>
+              <AnalysisStep
+                text={analysisState.text}
+                setText={analysisState.setText}
+                imagePreview={imageUpload.imagePreview}
+                setImagePreview={imageUpload.setImagePreview}
+                isAnalyzing={analysisState.isAnalyzing}
+                isProcessingImage={imageUpload.isProcessingImage}
+                ocrProgress={imageUpload.ocrProgress}
+                onAnalyze={handleCheck}
+                onImageUpload={imageUpload.handleFileChange}
+                handlePaste={imageUpload.handlePaste}
+                fileInputRef={imageUpload.fileInputRef}
+                onRemoveImage={imageUpload.handleRemoveImage}
+              />
+            </ErrorBoundary>
 
             {/* Hidden Model Selector - Easter Egg */}
             {showModelSelector && (
@@ -1060,9 +690,9 @@ export default function Home() {
                       setShowModelSelector(false);
                       setSelectedModel(defaultModel);
                       setHasUserSelectedModel(false);
-                      localStorage.removeItem("selectedAIModel");
+                      localStorage.removeItem(STORAGE_KEYS.SELECTED_MODEL);
                       setPendingModel("");
-                      setText(""); // Clear the rairai text
+                      analysisState.setText(""); // Clear the rairai text
                     }}
                   >
                     Exit Admin Mode
@@ -1143,7 +773,7 @@ export default function Home() {
                             schemaSupport = " ✅ JSON";
                           }
 
-                          return `${current.name || current.id.split("/")[1]} (${current.provider})${schemaSupport}`;
+                          return `${current.name || getModelName(current.id)} (${current.provider})${schemaSupport}`;
                         })()}
                       </P>
                     </div>
@@ -1171,7 +801,7 @@ export default function Home() {
                               ?.toLowerCase()
                               .includes(modelFilter.toLowerCase()),
                         )
-                        .slice(0, 50)
+                        .slice(0, UI.MAX_VISIBLE_MODELS)
                         .map((model: any) => (
                           <div
                             key={model.id}
@@ -1281,7 +911,7 @@ export default function Home() {
                             fontSize: "0.875rem",
                           }}
                         >
-                          Showing first 50 results. Use search to narrow down.
+                          Showing first {UI.MAX_VISIBLE_MODELS} results. Use search to narrow down.
                         </div>
                       )}
                     </div>
@@ -1334,12 +964,14 @@ export default function Home() {
             </div>
 
             {/* Context Refinement */}
-            {aiAnalysis && aiAnalysis.followUpQuestions && (
-              <ContextRefinement
-                followUpQuestions={aiAnalysis.followUpQuestions}
-                onRefineAnalysis={handleRefineAnalysis}
-                isAnalyzing={isAnalyzing}
-              />
+            {analysisState.aiAnalysis && analysisState.aiAnalysis.followUpQuestions && (
+              <ErrorBoundary>
+                <ContextRefinement
+                  followUpQuestions={analysisState.aiAnalysis.followUpQuestions}
+                  onRefineAnalysis={handleRefineAnalysis}
+                  isAnalyzing={analysisState.isAnalyzing}
+                />
+              </ErrorBoundary>
             )}
 
             {/* Back to Step 1 button */}
@@ -1363,13 +995,15 @@ export default function Home() {
         {/* Step 3: Results */}
         {stepperState.currentStep === 3 && (
           <div className="input-card">
-            <ResultsStep
-              isAnalyzing={isAnalyzing}
-              result={result}
-              aiAnalysis={aiAnalysis}
-              onNewAnalysis={handleNewAnalysis}
-              originalText={text}
-            />
+            <ErrorBoundary>
+              <ResultsStep
+                isAnalyzing={analysisState.isAnalyzing}
+                result={analysisState.result}
+                aiAnalysis={analysisState.aiAnalysis}
+                onNewAnalysis={handleNewAnalysis}
+                originalText={analysisState.text}
+              />
+            </ErrorBoundary>
           </div>
         )}
       </main>
@@ -1377,12 +1011,12 @@ export default function Home() {
       {/* Footer */}
       <footer className="footer">
         <p className="footer-text">
-          DNB Svindelsjekk • Ring oss på{" "}
-          <span className="footer-phone">915 04800</span> hvis du er usikker
+          {APP.NAME} • Ring oss på{" "}
+          <span className="footer-phone">{APP.SUPPORT_PHONE}</span> hvis du er usikker
         </p>
         <p className="footer-copyright">© {new Date().getFullYear()} DNB</p>
         <p style={{ fontSize: "0.75rem", color: "#666", marginTop: "0.5rem" }}>
-          v2025.09.17.2 • Forbedret deteksjon av sosiale medier-svindel og
+          v{APP.VERSION} • Forbedret deteksjon av sosiale medier-svindel og
           legitime nettsteder
         </p>
       </footer>

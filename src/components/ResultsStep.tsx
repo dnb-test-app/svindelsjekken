@@ -160,20 +160,190 @@ export default function ResultsStep({
         </Card>
       )}
 
-      {/* URL VERIFICATION CARD - Show first so users see category and URL checks immediately */}
+      {/* ACTIONABLE STEPS WITH CATEGORY BANNER - Show first so users see what to do immediately */}
+      {actionableSteps.length > 0 && aiAnalysis?.category && (() => {
+        // Category-specific styling for window title bar
+        const getBannerStyle = () => {
+          switch (aiAnalysis.category) {
+            case 'fraud':
+              return {
+                background: 'linear-gradient(135deg, #DC2626 0%, #EF4444 100%)',
+                borderColor: '#B91C1C',
+                iconBg: '#FFFFFF',
+                iconColor: '#DC2626',
+                textColor: '#FFFFFF',
+                categoryText: '⚠️ Svindel'
+              };
+            case 'context-required':
+              return {
+                background: 'linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)',
+                borderColor: '#D97706',
+                iconBg: '#FFFFFF',
+                iconColor: '#F59E0B',
+                textColor: '#FFFFFF',
+                categoryText: '❓ Mangler kontekst'
+              };
+            case 'marketing':
+              return {
+                background: 'linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%)',
+                borderColor: '#2563EB',
+                iconBg: '#FFFFFF',
+                iconColor: '#3B82F6',
+                textColor: '#FFFFFF',
+                categoryText: '📢 Markedsføring'
+              };
+            case 'info':
+              return {
+                background: 'linear-gradient(135deg, #6B7280 0%, #9CA3AF 100%)',
+                borderColor: '#4B5563',
+                iconBg: '#FFFFFF',
+                iconColor: '#6B7280',
+                textColor: '#FFFFFF',
+                categoryText: 'ℹ️ Info'
+              };
+            default:
+              return {
+                background: 'linear-gradient(135deg, #6B7280 0%, #9CA3AF 100%)',
+                borderColor: '#4B5563',
+                iconBg: '#FFFFFF',
+                iconColor: '#6B7280',
+                textColor: '#FFFFFF',
+                categoryText: '❓ Ukategorisert'
+              };
+          }
+        };
+
+        const bannerStyle = getBannerStyle();
+
+        return (
+          <div style={{
+            marginBottom: '2.5rem',
+            overflow: 'hidden',
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            border: `3px solid ${bannerStyle.borderColor}`,
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+          }}>
+            {/* Window Title Bar - Category Display */}
+            <div style={{
+              background: bannerStyle.background,
+              borderBottom: `3px solid ${bannerStyle.borderColor}`,
+              padding: 'clamp(1rem, 3vw, 1.25rem) clamp(1rem, 4vw, 1.5rem)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'clamp(0.75rem, 2vw, 1rem)'
+            }}>
+              <div style={{
+                backgroundColor: bannerStyle.iconBg,
+                borderRadius: '50%',
+                padding: 'clamp(0.5rem, 1.5vw, 0.75rem)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+              }}>
+                <Icon
+                  name={aiAnalysis.category === 'fraud' ? 'warning' : aiAnalysis.category === 'context-required' ? 'help' : 'information'}
+                  size="medium"
+                  style={{ color: bannerStyle.iconColor }}
+                />
+              </div>
+              <Heading
+                size="xx-large"
+                level="2"
+                style={{
+                  margin: 0,
+                  color: bannerStyle.textColor,
+                  fontWeight: 700,
+                  fontSize: 'clamp(1.5rem, 5vw, 2rem)',
+                  lineHeight: 1.2,
+                  textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                {bannerStyle.categoryText}
+              </Heading>
+            </div>
+
+            {/* Card Content */}
+            <div style={{ padding: 'clamp(1.25rem, 3vw, 1.5rem)' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                marginBottom: '1.5rem'
+              }}>
+                <Icon name="play" size="medium" style={{ color: 'var(--color-sea-green)' }} />
+                <Heading size="large" level="3" style={{ margin: 0 }}>
+                  Hva bør du gjøre nå?
+                </Heading>
+              </div>
+
+              <div style={{ display: 'grid', gap: '1.25rem' }}>
+                {actionableSteps.map((step, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '1.25rem',
+                      padding: '1.5rem',
+                      backgroundColor: 'white',
+                      borderRadius: '1rem',
+                      border: '2px solid var(--color-black-20)',
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div
+                      style={{
+                        backgroundColor: 'var(--color-sea-green)',
+                        color: 'white',
+                        borderRadius: '50%',
+                        width: '2.5rem',
+                        height: '2.5rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.125rem',
+                        fontWeight: 700,
+                        flexShrink: 0,
+                        boxShadow: '0 2px 8px rgba(0, 114, 114, 0.3)'
+                      }}
+                    >
+                      {index + 1}
+                    </div>
+                    <P size="medium" style={{
+                      margin: 0,
+                      lineHeight: 1.6,
+                      color: 'var(--color-black-80)',
+                      fontWeight: 500
+                    }}>
+                      {step}
+                    </P>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* URL VERIFICATION CARD - No category banner, just URL details */}
       {aiAnalysis && !isSecurityBlock && (
         <URLStatusCard
           positiveIndicators={aiAnalysis.positiveIndicators}
           negativeIndicators={aiAnalysis.negativeIndicators}
-          category={aiAnalysis.category}
+          category={undefined}
           webSearchUsed={aiAnalysis.webSearchUsed}
           webSearchReasons={aiAnalysis.webSearchReasons}
           urlVerifications={aiAnalysis.urlVerifications || []}
         />
       )}
 
-      {/* MAIN RESULT CARD - simplified */}
-      {!isSecurityBlock && (
+
+      {/* EDUCATIONAL CONTEXT - Background */}
+      {!isSecurityBlock && educationalContext && (
         <Card spacing="large" style={{
           marginBottom: 'clamp(1rem, 4vw, 2.5rem)',
           border: '3px solid var(--color-mint-green)',
@@ -198,11 +368,63 @@ export default function ResultsStep({
               color: 'var(--color-sea-green)',
               fontSize: 'clamp(1.25rem, 4vw, 1.75rem)'
             }}>
-              📚 Viktig å vite
+              📚 Bakgrunn
             </Heading>
           </div>
 
           <div style={{ display: 'grid', gap: '1.5rem' }}>
+            {/* Key Indicators - Viktige funn */}
+            {aiAnalysis?.mainIndicators && aiAnalysis.mainIndicators.length > 0 && (
+              <div style={{
+                padding: '1.25rem',
+                backgroundColor: '#FEF3C7',
+                borderRadius: '0.75rem',
+                border: '2px solid #F59E0B'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  marginBottom: '1rem'
+                }}>
+                  <Icon name="list" size="small" style={{ color: '#F59E0B' }} />
+                  <Heading size="medium" level="3" style={{ margin: 0, color: '#92400E' }}>
+                    Viktige funn
+                  </Heading>
+                </div>
+                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                  {aiAnalysis.mainIndicators.slice(0, 3).map((indicator, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '0.75rem'
+                      }}
+                    >
+                      <div style={{
+                        backgroundColor: '#F59E0B',
+                        borderRadius: '50%',
+                        padding: '0.375rem',
+                        flexShrink: 0,
+                        marginTop: '0.125rem'
+                      }}>
+                        <Icon name="warning" size="x-small" style={{ color: 'white' }} />
+                      </div>
+                      <P size="medium" style={{
+                        margin: 0,
+                        color: '#92400E',
+                        fontWeight: 500,
+                        lineHeight: 1.5
+                      }}>
+                        {indicator}
+                      </P>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Why This Assessment */}
             <div style={{
               padding: '1.25rem',
@@ -274,159 +496,6 @@ export default function ResultsStep({
           </div>
         </Card>
       )}
-
-      {/* KEY INDICATORS - simplified */}
-      {aiAnalysis?.mainIndicators && aiAnalysis.mainIndicators.length > 0 && (
-        <Card spacing="medium" style={{ marginBottom: 'clamp(1rem, 4vw, 2.5rem)' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'clamp(0.5rem, 2vw, 0.75rem)',
-            marginBottom: 'clamp(1rem, 3vw, 1.5rem)'
-          }}>
-            <Icon name="list" size="medium" style={{ color: 'var(--color-sea-green)' }} />
-            <Heading size="medium" level="2" style={{
-              margin: 0,
-              fontSize: 'clamp(1.125rem, 4vw, 1.5rem)'
-            }}>
-              Viktige funn
-            </Heading>
-          </div>
-
-          <div style={{ display: 'grid', gap: '1rem' }}>
-            {aiAnalysis.mainIndicators.slice(0, 3).map((indicator, index) => (
-              <div
-                key={index}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '1rem',
-                  padding: '1rem',
-                  backgroundColor: '#FEF3C7',
-                  borderRadius: '0.75rem',
-                  border: '2px solid #F59E0B'
-                }}
-              >
-                <div style={{
-                  backgroundColor: '#F59E0B',
-                  borderRadius: '50%',
-                  padding: 'clamp(0.375rem, 1vw, 0.5rem)',
-                  flexShrink: 0
-                }}>
-                  <Icon name="warning" size="small" style={{ color: 'white' }} />
-                </div>
-                <P size="medium" style={{
-                  margin: 0,
-                  color: '#92400E',
-                  fontWeight: 500,
-                  lineHeight: 1.5,
-                  fontSize: 'clamp(0.875rem, 3vw, 1rem)'
-                }}>
-                  {indicator}
-                </P>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* RECOMMENDATION */}
-      {recommendation && (
-        <Card spacing="large" style={{
-          marginBottom: '2.5rem',
-          border: '2px solid var(--color-sea-green)',
-          borderLeft: '6px solid var(--color-sea-green)'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            marginBottom: '1rem'
-          }}>
-            <div style={{
-              backgroundColor: 'var(--color-sea-green)',
-              borderRadius: '50%',
-              padding: '0.5rem'
-            }}>
-              <Icon name="lightbulb" size="medium" style={{ color: 'white' }} />
-            </div>
-            <Heading size="large" level="2" style={{ margin: 0, color: 'var(--color-sea-green)' }}>
-              Vår anbefaling
-            </Heading>
-          </div>
-          <P size="large" style={{
-            margin: 0,
-            lineHeight: 1.6,
-            color: 'var(--color-black-80)'
-          }}>
-            {recommendation}
-          </P>
-        </Card>
-      )}
-
-      {/* ACTIONABLE STEPS */}
-      {actionableSteps.length > 0 && (
-        <Card spacing="large" style={{ marginBottom: '2.5rem' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            marginBottom: '1.5rem'
-          }}>
-            <Icon name="play" size="medium" style={{ color: 'var(--color-sea-green)' }} />
-            <Heading size="large" level="2" style={{ margin: 0 }}>
-              Hva bør du gjøre nå?
-            </Heading>
-          </div>
-
-          <div style={{ display: 'grid', gap: '1.25rem' }}>
-            {actionableSteps.map((step, index) => (
-              <div
-                key={index}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '1.25rem',
-                  padding: '1.5rem',
-                  backgroundColor: 'white',
-                  borderRadius: '1rem',
-                  border: '2px solid var(--color-black-20)',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <div
-                  style={{
-                    backgroundColor: 'var(--color-sea-green)',
-                    color: 'white',
-                    borderRadius: '50%',
-                    width: '2.5rem',
-                    height: '2.5rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '1.125rem',
-                    fontWeight: 700,
-                    flexShrink: 0,
-                    boxShadow: '0 2px 8px rgba(0, 114, 114, 0.3)'
-                  }}
-                >
-                  {index + 1}
-                </div>
-                <P size="medium" style={{
-                  margin: 0,
-                  lineHeight: 1.6,
-                  color: 'var(--color-black-80)',
-                  fontWeight: 500
-                }}>
-                  {step}
-                </P>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
 
       {/* CTA SECTION */}
       <div style={{

@@ -4,41 +4,21 @@
  */
 
 import { hasMinimalContext, extractURLs, deduplicateURLsByDomain } from './urlAnalyzer';
+import { PHONE_NUMBER_PATTERNS, matchesAnyPattern } from './constants/fraudPatterns';
 
 /**
  * Detect Norwegian phone numbers in various formats
  */
 export function hasNorwegianPhoneNumber(text: string): boolean {
-  const patterns = [
-    // Norwegian mobile: +47 XX XX XX XX or 8-digit starting with 4/9
-    /(\+47)?[\s-]?[49]\d{7}/g,
-    // Formatted mobile: XX XX XX XX
-    /\b[49]\d[\s-]?\d{2}[\s-]?\d{2}[\s-]?\d{2}\b/g,
-    // Landline with area code: +47 XX XX XX XX (2-8 digits)
-    /(\+47)?[\s-]?[23567]\d{7}/g,
-    // Formatted landline: XX XX XX XX
-    /\b[23567]\d[\s-]?\d{2}[\s-]?\d{2}[\s-]?\d{2}\b/g,
-    // Generic 8-digit numbers
-    /\b\d{8}\b/g
-  ];
-
-  return patterns.some(pattern => pattern.test(text));
+  return matchesAnyPattern(text, PHONE_NUMBER_PATTERNS.norwegian);
 }
 
 /**
  * Detect Norwegian bank account numbers or IBAN
  */
 export function hasBankAccountNumber(text: string): boolean {
-  const patterns = [
-    // Norwegian account format: XXXX.XX.XXXXX
-    /\b\d{4}[\s.]?\d{2}[\s.]?\d{5}\b/g,
-    // IBAN format
-    /\bIBAN[\s:]?[A-Z]{2}\d{2}[A-Z0-9\s]{15,31}\b/gi,
-    // General account references
-    /kontonummer|account[\s-]?number|konto[\s-]?nr/gi
-  ];
-
-  return patterns.some(pattern => pattern.test(text));
+  const { BANK_ACCOUNT_PATTERNS } = require('./constants/fraudPatterns');
+  return matchesAnyPattern(text, BANK_ACCOUNT_PATTERNS);
 }
 
 /**
@@ -75,27 +55,26 @@ export function hasURLsNeedingVerification(text: string): boolean {
   if (hasMinimalContext(text)) return true;
 
   // Also check for suspicious patterns that warrant web verification
+  const { URL_PATTERNS, urlContainsAny } = require('./constants/fraudPatterns');
+
   return urls.some((url: string) => {
     const lowerUrl = url.toLowerCase();
 
     // URL shorteners
-    const shorteners = ['bit.ly', 'tinyurl', 'goo.gl', 't.co', 'ow.ly', 'is.gd'];
-    if (shorteners.some((shortener: string) => lowerUrl.includes(shortener))) return true;
+    if (urlContainsAny(url, URL_PATTERNS.shorteners)) return true;
 
     // Norwegian domains with suspicious patterns
-    if (lowerUrl.includes('.no') && (
-      lowerUrl.includes('dnb') ||
-      lowerUrl.includes('bank') ||
-      lowerUrl.includes('vipps') ||
-      lowerUrl.includes('bankid')
-    )) return true;
+    if (lowerUrl.includes('.no')) {
+      for (const pattern of Object.values(URL_PATTERNS.norwegianFinancial)) {
+        if ((pattern as RegExp).test(lowerUrl)) return true;
+      }
+    }
 
     // Suspicious TLDs
-    const suspiciousTlds = ['.tk', '.ml', '.ga', '.cf', '.click', '.download'];
-    if (suspiciousTlds.some((tld: string) => lowerUrl.includes(tld))) return true;
+    if (urlContainsAny(url, URL_PATTERNS.suspiciousTLDs)) return true;
 
     // IP addresses
-    if (/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(url)) return true;
+    if (URL_PATTERNS.ipAddress.test(url)) return true;
 
     return false;
   });

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Button, Textarea } from '@dnb/eufemia';
-import { ContextQuestion } from '@/lib/schemas/fraudAnalysis';
+import { ContextQuestion } from '@/lib/schemas/fraudAnalysis.zod';
 
 interface ContextRefinementProps {
   followUpQuestions: ContextQuestion[] | string[]; // Support both new and old format for compatibility

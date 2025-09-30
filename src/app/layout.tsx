@@ -3,6 +3,7 @@ import '@dnb/eufemia/style/themes/ui';
 import '@dnb/eufemia/components/logo/style';
 import './globals.css';
 import { Theme } from '@dnb/eufemia/shared';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 export const metadata = {
   title: 'DNB Svindelsjekk',
@@ -24,7 +25,9 @@ export default function RootLayout({
     <html lang="nb" suppressHydrationWarning>
       <body suppressHydrationWarning>
         <Theme>
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </Theme>
       </body>
     </html>

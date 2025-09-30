@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   supportsStructuredOutput,
   supportsNativeJSONSchema,
-} from "@/lib/schemas/fraudAnalysis";
+} from "@/lib/schemas/fraudAnalysis.zod";
+import { logDebug, logInfo, logError } from "@/lib/logger";
+import { getModelProvider } from "@/lib/utils/modelHelpers";
 
 // Minimal fraud detection prompt for testing
 const TEST_FRAUD_PROMPT = `Du er en svindeldeteksjonsekspert. Analyser denne teksten kort:
@@ -186,7 +188,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const forceFresh = searchParams.get("fresh") === "true";
 
-  console.log("Fetch models called, fresh:", forceFresh);
+  logDebug("Fetch models called", { forceFresh });
 
   const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -365,8 +367,8 @@ export async function GET(request: NextRequest) {
         const isVerified = knownWorkingModels.has(model.id);
         const hasJsonSupport = knownJsonSupport.has(model.id);
 
-        // Extract provider from model ID
-        const provider = model.id.split("/")[0] || "unknown";
+        // Extract provider from model ID using centralized helper
+        const provider = getModelProvider(model.id);
 
         const result: ModelTestResult = {
           id: model.id,
@@ -483,9 +485,10 @@ export async function GET(request: NextRequest) {
     // Sort by performance score
     modelsWithScore.sort((a, b) => b.performanceScore - a.performanceScore);
 
-    console.log(
-      `Returning ${modelsWithScore.length} models (${verifiedModels.length} verified)`,
-    );
+    logInfo("Returning models", {
+      totalModels: modelsWithScore.length,
+      verifiedCount: verifiedModels.length
+    });
 
     return NextResponse.json({
       timestamp: new Date().toISOString(),
@@ -513,7 +516,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error: any) {
-    console.error("Error fetching models:", error);
+    logError("Error fetching models", error);
     return NextResponse.json(
       { error: `Failed to fetch models: ${error.message}` },
       { status: 500 },
