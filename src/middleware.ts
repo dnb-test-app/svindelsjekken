@@ -1,75 +1,23 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getRateLimiter } from '@/lib/security/rateLimiter';
 
-// Rate limiting configuration
-const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 30; // 30 requests per minute for DNB employees
-const RATE_LIMIT_MAX_REQUESTS_PUBLIC = 10; // 10 requests per minute for public users
-
-// In-memory store for rate limiting (in production, use Redis or similar)
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
-
-// Clean up old entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of rateLimitStore.entries()) {
-    if (value.resetTime < now) {
-      rateLimitStore.delete(key);
-    }
-  }
-}, 60000); // Clean every minute
-
+/**
+ * Get rate limiting key from request
+ * Prefers session ID over IP address for more accurate tracking
+ */
 function getRateLimitKey(request: NextRequest): string {
-  // Use session ID for rate limiting (not IP, since DNB employees share IPs)
+  // Use session ID for rate limiting
   const sessionId = request.cookies.get('session_id')?.value;
-  
+
   if (sessionId) {
     return `session:${sessionId}`;
   }
-  
+
   // Fallback to IP for users without session
   const forwarded = request.headers.get('x-forwarded-for');
   const ip = forwarded ? forwarded.split(',')[0] : 'unknown';
   return `ip:${ip}`;
-}
-
-function checkRateLimit(key: string, isDNBNetwork: boolean): { allowed: boolean; remaining: number; resetTime: number } {
-  const now = Date.now();
-  const limit = isDNBNetwork ? RATE_LIMIT_MAX_REQUESTS : RATE_LIMIT_MAX_REQUESTS_PUBLIC;
-  
-  const current = rateLimitStore.get(key);
-  
-  if (!current || current.resetTime < now) {
-    // Start new window
-    const resetTime = now + RATE_LIMIT_WINDOW_MS;
-    rateLimitStore.set(key, { count: 1, resetTime });
-    return { allowed: true, remaining: limit - 1, resetTime };
-  }
-  
-  if (current.count >= limit) {
-    // Rate limit exceeded
-    return { allowed: false, remaining: 0, resetTime: current.resetTime };
-  }
-  
-  // Increment count
-  current.count++;
-  rateLimitStore.set(key, current);
-  return { allowed: true, remaining: limit - current.count, resetTime: current.resetTime };
-}
-
-function isDNBNetwork(request: NextRequest): boolean {
-  // Check if request is from DNB network
-  // In production, this would check against actual DNB IP ranges
-  const dnbCookie = request.cookies.get('dnb_employee');
-  const referer = request.headers.get('referer');
-  const userAgent = request.headers.get('user-agent');
-  
-  // Simple checks for DNB network (enhance in production)
-  if (dnbCookie?.value === 'true') return true;
-  if (referer?.includes('dnb.no')) return true;
-  if (userAgent?.includes('DNB-Internal')) return true;
-  
-  return false;
 }
 
 export function middleware(request: NextRequest) {
@@ -81,40 +29,43 @@ export function middleware(request: NextRequest) {
     if (request.method === 'GET' && request.nextUrl.pathname.match(/\/(status|health|models)$/)) {
       return NextResponse.next();
     }
-    
+
     const rateLimitKey = getRateLimitKey(request);
-    const isDNB = isDNBNetwork(request);
-    const { allowed, remaining, resetTime } = checkRateLimit(rateLimitKey, isDNB);
-    
-    if (!allowed) {
-      // Rate limit exceeded
+    const rateLimiter = getRateLimiter();
+
+    // Check rate limits
+    const result = rateLimiter.checkLimit(rateLimitKey);
+
+    if (!result.allowed) {
+      // Determine which limit was violated
+      const violated = result.violated || 'minute';
+      const retryAfter = Math.ceil((result.resetTime[violated] - Date.now()) / 1000);
+
+      // Construct user-friendly error message
+      const limitMessages = {
+        minute: 'For mange forespørsler. Vent litt før du prøver igjen.',
+        hour: 'For mange forespørsler. Prøv igjen senere.',
+        day: 'Daglig grense nådd. Prøv igjen i morgen.'
+      };
+
       return NextResponse.json(
         {
           error: 'Rate limit exceeded',
-          message: isDNB 
-            ? 'For mange forespørsler. Vent et minutt før du prøver igjen.' 
-            : 'Too many requests. Please wait a minute before trying again.',
-          retryAfter: Math.ceil((resetTime - Date.now()) / 1000)
+          message: limitMessages[violated],
+          retryAfter
         },
         {
           status: 429,
           headers: {
-            'X-RateLimit-Limit': String(isDNB ? RATE_LIMIT_MAX_REQUESTS : RATE_LIMIT_MAX_REQUESTS_PUBLIC),
-            'X-RateLimit-Remaining': String(remaining),
-            'X-RateLimit-Reset': new Date(resetTime).toISOString(),
-            'Retry-After': String(Math.ceil((resetTime - Date.now()) / 1000))
+            'Retry-After': String(retryAfter)
           }
         }
       );
     }
-    
-    // Add rate limit headers to response
+
+    // Create response and set session cookie if not present
     const response = NextResponse.next();
-    response.headers.set('X-RateLimit-Limit', String(isDNB ? RATE_LIMIT_MAX_REQUESTS : RATE_LIMIT_MAX_REQUESTS_PUBLIC));
-    response.headers.set('X-RateLimit-Remaining', String(remaining));
-    response.headers.set('X-RateLimit-Reset', new Date(resetTime).toISOString());
-    
-    // Set session cookie if not present
+
     if (!request.cookies.get('session_id')) {
       const sessionId = crypto.randomUUID();
       response.cookies.set('session_id', sessionId, {
@@ -124,7 +75,7 @@ export function middleware(request: NextRequest) {
         maxAge: 60 * 60 * 24 // 24 hours
       });
     }
-    
+
     return response;
   }
   
