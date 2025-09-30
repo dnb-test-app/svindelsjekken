@@ -12,6 +12,7 @@ import {
   Icon
 } from '@dnb/eufemia';
 import URLStatusCard from './URLStatusCard';
+import { getRiskColors, getRiskText, getRiskDescription, getRiskIcon } from '@/lib/constants/riskConstants';
 
 interface AnalysisResult {
   score: number;
@@ -127,64 +128,7 @@ export default function ResultsStep({
     }
   };
 
-  const getRiskText = () => {
-    switch (riskLevel) {
-      case 'high': return 'HØYRISIKO';
-      case 'medium': return 'MIDDELS RISIKO';
-      case 'low': return 'LAV RISIKO';
-      default: return 'UKJENT';
-    }
-  };
-
-  const getRiskDescription = () => {
-    if (score >= 60) return 'Krever oppmerksomhet og verifisering';
-    if (score >= 30) return 'Vær forsiktig og sjekk nøye';
-    return 'Få risikosignaler funnet';
-  };
-
-  const getRiskIcon = () => {
-    switch (riskLevel) {
-      case 'high': return 'warning';
-      case 'medium': return 'information';
-      case 'low': return 'check_circle';
-      default: return 'information';
-    }
-  };
-
-  const getRiskColors = () => {
-    switch (riskLevel) {
-      case 'high':
-        return {
-          bg: '#FEE2E2',
-          border: '#DC2626',
-          text: '#991B1B',
-          icon: '#DC2626'
-        };
-      case 'medium':
-        return {
-          bg: '#FEF3C7',
-          border: '#F59E0B',
-          text: '#92400E',
-          icon: '#F59E0B'
-        };
-      case 'low':
-        return {
-          bg: '#D1FAE5',
-          border: '#10B981',
-          text: '#065F46',
-          icon: '#10B981'
-        };
-      default:
-        return {
-          bg: '#DBEAFE',
-          border: '#3B82F6',
-          text: '#1E40AF',
-          icon: '#3B82F6'
-        };
-    }
-  };
-
-  const colors = getRiskColors();
+  const colors = getRiskColors(riskLevel);
 
   return (
     <div style={{

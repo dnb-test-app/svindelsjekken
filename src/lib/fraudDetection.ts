@@ -3,6 +3,8 @@
  * Detects patterns that would benefit from web search verification
  */
 
+import { hasMinimalContext, extractURLs, deduplicateURLsByDomain } from './urlAnalyzer';
+
 /**
  * Detect Norwegian phone numbers in various formats
  */
@@ -63,9 +65,6 @@ export function mentionsNorwegianBrands(text: string): boolean {
  * Detect URLs that should be verified against Norwegian databases
  */
 export function hasURLsNeedingVerification(text: string): boolean {
-  // Import URL analyzer to check for minimal context
-  const { hasMinimalContext, extractURLs, deduplicateURLsByDomain } = require('./urlAnalyzer');
-
   // Extract URLs from text and deduplicate by domain
   const allUrls = extractURLs(text);
   const urls = deduplicateURLsByDomain(allUrls);
@@ -140,7 +139,6 @@ export function needsWebSearchVerification(text: string): boolean {
  */
 export function getWebSearchReasons(text: string, context?: any): string[] {
   const reasons: string[] = [];
-  const { hasMinimalContext, extractURLs, deduplicateURLsByDomain } = require('./urlAnalyzer');
 
   // Check if image content is present
   if (context?.imageData) {

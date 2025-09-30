@@ -2,7 +2,6 @@
 // This is the single source of truth for all fraud analysis types and validation
 
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 
 // URL Verification Schema
 export const URLVerificationSchema = z.object({

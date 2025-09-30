@@ -53,6 +53,16 @@ export class RateLimiter {
     // Start periodic cleanup
     const cleanupMs = config.cleanupIntervalMs || 60000; // Default: 1 minute
     this.cleanupInterval = setInterval(() => this.cleanup(), cleanupMs);
+
+    // Ensure cleanup on process termination (Node.js environment)
+    if (typeof process !== 'undefined' && process.on) {
+      const shutdownHandler = () => {
+        this.destroy();
+      };
+      process.once('beforeExit', shutdownHandler);
+      process.once('SIGTERM', shutdownHandler);
+      process.once('SIGINT', shutdownHandler);
+    }
   }
 
   /**

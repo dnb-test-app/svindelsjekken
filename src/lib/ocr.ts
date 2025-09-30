@@ -1,4 +1,5 @@
 import { createWorker, type Worker } from 'tesseract.js';
+import { logError } from './logger';
 
 export interface OCRProgress {
   status: string;
@@ -35,7 +36,7 @@ export async function runOCR(
 
     return text.trim();
   } catch (error) {
-    console.error('OCR failed:', error);
+    logError('OCR processing failed', error, { fileName: file.name, fileSize: file.size });
     return '';
   } finally {
     // Always clean up worker

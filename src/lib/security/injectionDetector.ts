@@ -3,6 +3,8 @@
  * Detects and analyzes potential prompt injection attempts
  */
 
+import { logSecurityEvent } from '../logger';
+
 export interface InjectionDetectionResult {
   detected: boolean;
   severity: 'none' | 'low' | 'medium' | 'high' | 'critical';
@@ -251,29 +253,24 @@ export function analyzeInjectionRisk(result: InjectionDetectionResult): {
 /**
  * Logs security events for monitoring
  */
-export function logSecurityEvent(
+/**
+ * Logs injection detection events using centralized logger
+ */
+export function logInjectionDetectionEvent(
   eventType: string,
   details: InjectionDetectionResult,
   metadata?: Record<string, any>
 ): void {
-  const event = {
-    timestamp: new Date().toISOString(),
+  const severity = details.severity === 'critical' ? 'critical' :
+                  details.severity === 'high' ? 'high' :
+                  details.severity === 'medium' ? 'medium' : 'low';
+
+  logSecurityEvent(eventType, severity, {
     type: eventType,
-    severity: details.severity,
     score: details.score,
     patterns: details.patterns,
-    metadata,
-    // DNB compliance fields
-    system: 'DNB_SVINDELSJEKK',
     component: 'PROMPT_INJECTION_DETECTOR',
-    version: '1.0.0'
-  };
-
-  // In production, this would send to DNB's security monitoring system
-  if (process.env.NODE_ENV === 'production') {
-    // Send to logging service
-    console.error('[SECURITY_EVENT]', JSON.stringify(event));
-  } else {
-    console.warn('[SECURITY_EVENT]', event);
-  }
+    version: '1.0.0',
+    ...metadata,
+  });
 }

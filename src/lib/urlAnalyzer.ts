@@ -3,6 +3,8 @@
  * Analyzes URLs for fraud indicators and suspicious patterns
  */
 
+import { URL_ANALYSIS_SCORES } from './constants/riskConstants';
+
 export interface URLAnalysis {
   isUrl: boolean;
   hasMinimalContext: boolean;
@@ -357,16 +359,16 @@ export function analyzeURLs(text: string, isNorwegian: boolean = true): URLAnaly
   let riskScore = 0;
 
   // Base score for minimal context
-  if (minimalContext) riskScore += 30;
+  if (minimalContext) riskScore += URL_ANALYSIS_SCORES.MINIMAL_CONTEXT;
 
   // Add points for each suspicious pattern
-  if (suspicious.hasURLShortener) riskScore += 25;
-  if (suspicious.hasSuspiciousTLD) riskScore += 35;
-  if (suspicious.hasIPAddress) riskScore += 40;
-  if (suspicious.hasExcessiveSubdomains) riskScore += 20;
-  if (suspicious.hasMisleadingDomain) riskScore += 45;
-  if (suspicious.hasTyposquatting) riskScore += 50;
-  if (suspicious.hasPhishingKeywords) riskScore += 30;
+  if (suspicious.hasURLShortener) riskScore += URL_ANALYSIS_SCORES.URL_SHORTENER;
+  if (suspicious.hasSuspiciousTLD) riskScore += URL_ANALYSIS_SCORES.SUSPICIOUS_TLD;
+  if (suspicious.hasIPAddress) riskScore += URL_ANALYSIS_SCORES.IP_ADDRESS;
+  if (suspicious.hasExcessiveSubdomains) riskScore += URL_ANALYSIS_SCORES.EXCESSIVE_SUBDOMAINS;
+  if (suspicious.hasMisleadingDomain) riskScore += URL_ANALYSIS_SCORES.MISLEADING_DOMAIN;
+  if (suspicious.hasTyposquatting) riskScore += URL_ANALYSIS_SCORES.TYPOSQUATTING;
+  if (suspicious.hasPhishingKeywords) riskScore += URL_ANALYSIS_SCORES.PHISHING_KEYWORDS;
 
   // Cap at 100
   riskScore = Math.min(100, riskScore);

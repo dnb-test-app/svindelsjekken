@@ -1,4 +1,5 @@
 import { analyzeText } from '../textRules';
+import { RISK_THRESHOLDS } from '../constants/riskConstants';
 
 describe('textRules', () => {
   describe('analyzeText', () => {
@@ -61,11 +62,24 @@ describe('textRules', () => {
     it('should generate appropriate recommendations', () => {
       const highRiskText = 'Send BankID kode til dette nummeret umiddelbart!';
       const result = analyzeText(highRiskText);
-      
+
       expect(result.recommendations.length).toBeGreaterThan(0);
-      expect(result.recommendations.some((r: string) => 
+      expect(result.recommendations.some((r: string) =>
         r.includes('IKKE oppgi') || r.includes('DNB')
       )).toBeTruthy();
+    });
+
+    it('should use risk thresholds from constants', () => {
+      const justLow = analyzeText('Velkommen til oss');
+      expect(justLow.risk_score).toBeLessThan(RISK_THRESHOLDS.MEDIUM_MIN);
+
+      const justMedium = analyzeText('VIKTIG melding om kontoen');
+      expect(justMedium.risk_score).toBeGreaterThanOrEqual(RISK_THRESHOLDS.MEDIUM_MIN);
+    });
+
+    it('should cap risk score at 100', () => {
+      const extremeRisk = analyzeText('HASTER UMIDDELBART! Oppgi passord BankID og personnummer nå!');
+      expect(extremeRisk.risk_score).toBeLessThanOrEqual(100);
     });
   });
 });

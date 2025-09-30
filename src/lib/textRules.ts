@@ -1,4 +1,5 @@
 import { analyzeURLs } from './urlAnalyzer';
+import { RISK_THRESHOLDS, TRIGGER_SEVERITY_SCORES, getRiskLevelFromScore } from './constants/riskConstants';
 
 export interface Trigger {
   type: string;
@@ -182,13 +183,13 @@ export function analyzeText(text: string): AnalysisResult {
           // Beregn risikoscore basert på alvorlighetsgrad
           switch (rule.severity) {
             case 'high':
-              riskScore += 30;
+              riskScore += TRIGGER_SEVERITY_SCORES.HIGH;
               break;
             case 'medium':
-              riskScore += 15;
+              riskScore += TRIGGER_SEVERITY_SCORES.MEDIUM;
               break;
             case 'low':
-              riskScore -= 10; // Reduser risikoscore for legitimt innhold
+              riskScore -= TRIGGER_SEVERITY_SCORES.LOW; // Reduser risikoscore for legitimt innhold
               break;
           }
         }
@@ -197,17 +198,10 @@ export function analyzeText(text: string): AnalysisResult {
   }
   
   // Begrens risikoscore til 0-100
-  riskScore = Math.max(0, Math.min(100, riskScore));
-  
+  riskScore = Math.max(RISK_THRESHOLDS.LOW_MIN, Math.min(RISK_THRESHOLDS.HIGH_MAX, riskScore));
+
   // Bestem risikonivå
-  let riskLevel: 'low' | 'medium' | 'high';
-  if (riskScore >= 60) {
-    riskLevel = 'high';
-  } else if (riskScore >= 30) {
-    riskLevel = 'medium';
-  } else {
-    riskLevel = 'low';
-  }
+  const riskLevel = getRiskLevelFromScore(riskScore);
   
   // Generer anbefalinger basert på risikonivå
   const recommendations = [];

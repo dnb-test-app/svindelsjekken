@@ -90,6 +90,3 @@ export function parseFraudAnalysis(content: string): ParseResult<FraudAnalysisRe
     };
   }
 }
-
-// Alias for backward compatibility
-export const parseGPT5FraudAnalysis = parseFraudAnalysis;
