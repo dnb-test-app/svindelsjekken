@@ -1016,8 +1016,7 @@ export default function Home() {
         </p>
         <p className="footer-copyright">© {new Date().getFullYear()} DNB</p>
         <p style={{ fontSize: "0.75rem", color: "#666", marginTop: "0.5rem" }}>
-          v{APP.VERSION} • Forbedret deteksjon av sosiale medier-svindel og
-          legitime nettsteder
+          v{APP.VERSION} • To-fase domene-verifisering, forbedret BankID/Vipps-beskyttelse
         </p>
       </footer>
     </div>

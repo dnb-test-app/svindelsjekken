@@ -3,7 +3,7 @@
  * Detects patterns that would benefit from web search verification
  */
 
-import { hasMinimalContext, extractURLs, deduplicateURLsByDomain } from './urlAnalyzer';
+import { hasMinimalContext, extractURLs, deduplicateURLsByDomain, extractDomain, hasCriticalAuthPattern } from './urlAnalyzer';
 import { PHONE_NUMBER_PATTERNS, matchesAnyPattern } from './constants/fraudPatterns';
 
 /**
@@ -59,6 +59,10 @@ export function hasURLsNeedingVerification(text: string): boolean {
 
   return urls.some((url: string) => {
     const lowerUrl = url.toLowerCase();
+    const domain = extractDomain(url);
+
+    // CRITICAL: Check for authentication service patterns (BankID, Vipps, etc.)
+    if (hasCriticalAuthPattern(domain)) return true;
 
     // URL shorteners
     if (urlContainsAny(url, URL_PATTERNS.shorteners)) return true;
@@ -78,6 +82,32 @@ export function hasURLsNeedingVerification(text: string): boolean {
 
     return false;
   });
+}
+
+/**
+ * Check if text mentions BankID in a way that needs verification
+ */
+export function mentionsBankID(text: string): boolean {
+  const bankIdPatterns = [
+    /bankid/i,
+    /bank-?id/i,
+    /\bbank\s*id\b/i,
+  ];
+
+  return bankIdPatterns.some(pattern => pattern.test(text));
+}
+
+/**
+ * Check if text mentions Vipps in a way that needs verification
+ */
+export function mentionsVipps(text: string): boolean {
+  const vippsPatterns = [
+    /vipps/i,
+    /vi[1l]pps/i, // Typosquatting attempts
+    /mobilepay/i,
+  ];
+
+  return vippsPatterns.some(pattern => pattern.test(text));
 }
 
 /**
@@ -109,7 +139,9 @@ export function needsWebSearchVerification(text: string): boolean {
     hasNorwegianPhoneNumber(text) ||
     mentionsNorwegianBrands(text) ||
     mentionsOfficialNorwegianServices(text) ||
-    hasBankAccountNumber(text)
+    hasBankAccountNumber(text) ||
+    mentionsBankID(text) ||
+    mentionsVipps(text)
   );
 }
 
@@ -124,12 +156,25 @@ export function getWebSearchReasons(text: string, context?: any): string[] {
     reasons.push('Image content detected - may contain URLs, brands, or suspicious elements');
   }
 
+  // CRITICAL: Check for authentication service mentions first
+  if (mentionsBankID(text)) {
+    reasons.push('BankID mentioned - requires verification to distinguish phishing from legitimate discussion');
+  }
+
+  if (mentionsVipps(text)) {
+    reasons.push('Vipps mentioned - requires verification to distinguish phishing from legitimate communication');
+  }
+
   if (hasURLsNeedingVerification(text)) {
     // Check if it's because of minimal context or suspicious patterns
     const allUrls = extractURLs(text);
     const urls = deduplicateURLsByDomain(allUrls);
     if (urls.length > 0) {
-      if (hasMinimalContext(text)) {
+      const domain = urls.length > 0 ? extractDomain(urls[0]) : '';
+
+      if (hasCriticalAuthPattern(domain)) {
+        reasons.push('URL contains critical authentication service patterns (BankID/Vipps/auth) - needs verification');
+      } else if (hasMinimalContext(text)) {
         reasons.push('URL with minimal context detected');
       } else {
         reasons.push('Suspicious URLs detected');

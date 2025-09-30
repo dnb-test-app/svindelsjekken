@@ -35,10 +35,27 @@ const SUSPICIOUS_TLDS = [
   '.review', '.bid', '.date', '.loan', '.men', '.win'
 ];
 
-// Legitimate Norwegian domains that are often typosquatted
-const LEGITIMATE_DOMAINS = [
-  'dnb.no', 'bankid.no', 'vipps.no', 'nav.no', 'regjeringen.no',
-  'sparebank1.no', 'nordea.no', 'handelsbanken.no'
+// Critical authentication systems that need special verification via web search
+// These patterns indicate domains that require enhanced scrutiny due to high fraud risk
+const CRITICAL_AUTH_PATTERNS = [
+  // BankID is CRITICAL - any mention needs immediate web verification
+  /bankid/i,
+  /bank-?id/i,
+  /\bbank\s*id\b/i,
+  // Vipps is CRITICAL - payment system commonly targeted for fraud
+  /vipps/i,
+  /vi[1l]pps/i, // Common typosquatting attempts (v1pps, vilpps)
+  // Other authentication systems that are commonly spoofed
+  /mobilepay/i,
+  /\bauth\b/i,
+  /\blogin\b/i,
+  /\bsignin\b/i
+];
+
+// Common marketing subdomains used by legitimate companies
+const MARKETING_SUBDOMAINS = [
+  'go.', 'click.', 'shop.', 'email.', 'newsletter.', 'campaign.',
+  'promo.', 'offer.', 'tilbud.', 'kampanje.', 'nyhetsbrev.'
 ];
 
 // Keywords that indicate phishing when combined with URLs
@@ -104,6 +121,48 @@ export function deduplicateURLsByDomain(urls: string[]): string[] {
 }
 
 /**
+ * Extract main domain from subdomain (e.g., go.meny.no -> meny.no)
+ */
+export function extractMainDomain(domain: string): string {
+  const parts = domain.split('.');
+
+  // If it's a Norwegian domain (.no), take the last two parts
+  if (domain.endsWith('.no') && parts.length >= 2) {
+    return parts.slice(-2).join('.');
+  }
+
+  // For other domains, take the last two parts unless it's a known TLD extension
+  if (parts.length >= 2) {
+    const commonTLDs = ['co.uk', 'com.au', 'co.za'];
+    const lastTwo = parts.slice(-2).join('.');
+
+    if (commonTLDs.includes(lastTwo) && parts.length >= 3) {
+      return parts.slice(-3).join('.');
+    }
+
+    return lastTwo;
+  }
+
+  return domain;
+}
+
+/**
+ * Check if domain uses a marketing subdomain
+ */
+export function hasMarketingSubdomain(domain: string): boolean {
+  return MARKETING_SUBDOMAINS.some(subdomain =>
+    domain.toLowerCase().startsWith(subdomain.toLowerCase())
+  );
+}
+
+/**
+ * Check if domain contains critical authentication patterns that need web verification
+ */
+export function hasCriticalAuthPattern(domain: string): boolean {
+  return CRITICAL_AUTH_PATTERNS.some(pattern => pattern.test(domain));
+}
+
+/**
  * Calculate string similarity (simple Levenshtein-based)
  */
 function calculateSimilarity(str1: string, str2: string): number {
@@ -148,22 +207,35 @@ function levenshteinDistance(str1: string, str2: string): number {
 }
 
 /**
- * Check if domain is a typosquatting attempt
+ * Check if domain appears to be impersonating critical authentication services
+ * This triggers web search verification instead of relying on hardcoded lists
  */
 function checkTyposquatting(domain: string): boolean {
-  return LEGITIMATE_DOMAINS.some(legitimate => {
-    if (domain === legitimate) return false; // Exact match is not typosquatting
+  // Check if domain mentions critical authentication terms but looks suspicious
+  const hasCriticalPattern = hasCriticalAuthPattern(domain);
 
-    const similarity = calculateSimilarity(domain, legitimate);
+  if (!hasCriticalPattern) {
+    return false; // No critical patterns, not typosquatting of auth services
+  }
 
-    // Flag as typosquatting if:
-    // 1. Very similar (70-95% similarity) but not exact
-    // 2. Contains the legitimate domain as substring with extra chars
-    const isSubstring = domain.includes(legitimate.replace('.', '')) ||
-                       domain.includes(legitimate.replace('.', '-'));
+  // If domain contains critical auth patterns, check for suspicious indicators:
 
-    return (similarity > 0.7 && similarity < 0.95) || isSubstring;
-  });
+  // 1. Mixed case or numbers in auth terms (e.g., "BankId", "bank1d", "v1pps")
+  const hasAlteredAuthTerms = /bank[0-9i1l]d|bankid[0-9]/i.test(domain) ||
+                             /v[i1l]pps|v[i1l]pp5/i.test(domain);
+
+  // 2. Auth terms combined with suspicious words
+  const hasSuspiciousWords = /(?:bankid|vipps|auth).*(?:secure|verify|update|login|portal)/i.test(domain) ||
+                            /(?:secure|verify|update|login|portal).*(?:bankid|vipps|auth)/i.test(domain);
+
+  // 3. Suspicious TLD with auth terms
+  const hasSuspiciousTLD = SUSPICIOUS_TLDS.some(tld => domain.includes(tld)) && hasCriticalPattern;
+
+  // 4. Multiple hyphens with auth terms (bank-id-secure.com)
+  const hasExcessiveHyphens = domain.split('-').length > 3 && hasCriticalPattern;
+
+  // Flag as potential typosquatting requiring web verification
+  return hasAlteredAuthTerms || hasSuspiciousWords || hasSuspiciousTLD || hasExcessiveHyphens;
 }
 
 /**
@@ -195,6 +267,13 @@ function hasIPAddress(url: string): boolean {
 function hasExcessiveSubdomains(url: string): boolean {
   const domain = extractDomain(url);
   const parts = domain.split('.');
+
+  // Don't flag marketing subdomains as excessive
+  if (hasMarketingSubdomain(domain)) {
+    // For marketing subdomains, only flag if more than 4 parts (e.g., go.shop.example.com.evil.tk)
+    return parts.length > 4;
+  }
+
   // Flag if more than 3 parts (e.g., secure.login.fake.dnb.malicious.com)
   return parts.length > 4;
 }
@@ -358,8 +437,12 @@ export function analyzeURLs(text: string, isNorwegian: boolean = true): URLAnaly
   // Calculate risk score
   let riskScore = 0;
 
-  // Base score for minimal context
-  if (minimalContext) riskScore += URL_ANALYSIS_SCORES.MINIMAL_CONTEXT;
+  // Base score for minimal context - reduced if marketing subdomain
+  if (minimalContext) {
+    const domain = urls.length > 0 ? extractDomain(urls[0]) : '';
+    const hasMarketing = hasMarketingSubdomain(domain);
+    riskScore += hasMarketing ? 15 : URL_ANALYSIS_SCORES.MINIMAL_CONTEXT;
+  }
 
   // Add points for each suspicious pattern
   if (suspicious.hasURLShortener) riskScore += URL_ANALYSIS_SCORES.URL_SHORTENER;

@@ -3,16 +3,18 @@
  * Assembles modular prompt sections into complete fraud detection prompt
  *
  * RULE HIERARCHY (highest to lowest priority):
- * 1. Critical Fraud Rules (BankID renewal, urgent threats) - ALWAYS fraud
- * 2. Behavioral Patterns (phishing tactics, social engineering)
- * 3. URL Verification (domain legitimacy checks)
- * 4. Context Analysis (sender, relationship, expectations)
+ * 1. Critical Fraud Rules (BankID/Vipps phishing, urgent threats) - ALWAYS fraud
+ * 2. Authentication Service Protection (BankID, Vipps context-aware detection)
+ * 3. Behavioral Patterns (phishing tactics, social engineering)
+ * 4. URL Verification (domain legitimacy checks with dynamic verification)
+ * 5. Context Analysis (sender, relationship, expectations)
  */
 
 import { getSystemContext } from "./sections/systemContext";
 import { getSecurityBoundaries } from "./sections/securityBoundaries";
 import { getCriticalFraudRules, getCriticalRulesSummary } from "./sections/criticalFraudRules";
 import { getBankIdRules, getFundamentalPrinciple } from "./sections/bankIdRules";
+import { getVippsRules } from "./sections/vippsRules";
 import {
   getUrlExtractionRules,
   getMinimalContextUrlRules,
@@ -85,6 +87,8 @@ ${getCriticalFraudRules()}
 ${getCriticalRulesSummary()}
 
 ${getBankIdRules()}
+
+${getVippsRules()}
 
 ${getUrlExtractionRules()}
 
