@@ -55,7 +55,7 @@ export class RateLimiter {
     this.cleanupInterval = setInterval(() => this.cleanup(), cleanupMs);
 
     // Ensure cleanup on process termination (Node.js environment)
-    if (typeof process !== 'undefined' && process.on) {
+    if (typeof process !== 'undefined' && typeof process.on === 'function') {
       const shutdownHandler = () => {
         this.destroy();
       };

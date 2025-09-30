@@ -57,7 +57,7 @@ test.describe('UX Review - DNB Eufemia Standards', () => {
     await expect(uploadArea).toBeVisible();
     await page.screenshot({
       path: 'tests/screenshots/ux-review-upload-area.png',
-      clip: await uploadArea.boundingBox()
+      clip: await uploadArea.boundingBox() || undefined
     });
 
     // Test text input
@@ -72,7 +72,7 @@ test.describe('UX Review - DNB Eufemia Standards', () => {
     await analyzeButton.hover();
     await page.screenshot({
       path: 'tests/screenshots/ux-review-button-hover.png',
-      clip: await analyzeButton.boundingBox()
+      clip: await analyzeButton.boundingBox() || undefined
     });
   });
 

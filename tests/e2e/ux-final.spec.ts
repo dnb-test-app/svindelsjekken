@@ -38,6 +38,7 @@ test.describe('UX Final Review - After DNB Eufemia Fixes', () => {
     const heroSection = page.locator('.hero-section').first();
     const heroBg = await heroSection.evaluate(el => {
       const parent = el.closest('section');
+      if (!parent) return '';
       const computed = window.getComputedStyle(parent);
       return computed.backgroundColor;
     });

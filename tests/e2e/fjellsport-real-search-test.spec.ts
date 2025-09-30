@@ -100,6 +100,10 @@ test.describe('Fjellsport.no Real Web Search Verification', () => {
       canvas.height = 400;
       const ctx = canvas.getContext('2d');
 
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+
       // White background
       ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, 800, 400);
@@ -181,7 +185,7 @@ test.describe('Fjellsport.no Real Web Search Verification', () => {
       try {
         fs.unlinkSync(tempFilePath);
       } catch (e) {
-        console.log('Could not delete temp file:', e.message);
+        console.log('Could not delete temp file:', e instanceof Error ? e.message : String(e));
       }
     }, { tempFilePath });
   });

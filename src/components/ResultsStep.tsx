@@ -55,6 +55,7 @@ interface AIAnalysisResult {
   actionableSteps?: string[];
   webSearchUsed?: boolean;
   webSearchReasons?: string[];
+  securityBlock?: boolean;
 }
 
 interface ResultsStepProps {
@@ -391,7 +392,7 @@ export default function ResultsStep({
                         flexShrink: 0,
                         marginTop: '0.125rem'
                       }}>
-                        <Icon name="warning" size="x-small" style={{ color: 'white' }} />
+                        <Icon name="warning" size="small" style={{ color: 'white' }} />
                       </div>
                       <P size="medium" style={{
                         margin: 0,

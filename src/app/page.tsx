@@ -731,17 +731,13 @@ export default function Home() {
                       <Input
                         placeholder="Search models (e.g., gpt-4, claude, gemini)..."
                         value={modelFilter}
-                        onChange={(e) => setModelFilter(e.target.value)}
+                        onChange={(e) => setModelFilter((e.target as HTMLInputElement).value)}
                         size="medium"
                         icon="search"
                         icon_position="left"
                         style={{
                           width: "100%",
-                          "--input-border-color": "var(--color-sea-green-30)",
-                          "--input-border-color-focus":
-                            "var(--color-sea-green)",
-                          "--input-border-width": "2px",
-                        }}
+                        } as React.CSSProperties}
                       />
                     </div>
 

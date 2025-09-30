@@ -161,8 +161,7 @@ export default function URLStatusCard({
                 <P size="small" style={{ margin: 0, fontWeight: 600 }}>Status:</P>
                 <span style={{
                   color: statusInfo.variant === 'success' ? '#10B981' :
-                        statusInfo.variant === 'error' ? '#DC2626' :
-                        statusInfo.variant === 'warning' ? '#F59E0B' : '#3B82F6',
+                        statusInfo.variant === 'error' ? '#DC2626' : '#3B82F6',
                   fontWeight: 600
                 }}>
                   {statusInfo.emoji} {statusInfo.status}

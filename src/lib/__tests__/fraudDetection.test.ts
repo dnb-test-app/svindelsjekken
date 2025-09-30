@@ -1,71 +1,71 @@
 import { describe, it, expect } from '@jest/globals';
 import {
-  hasNorwegianPhoneNumbers,
-  hasNorwegianBrands,
+  hasNorwegianPhoneNumber,
+  mentionsNorwegianBrands,
   hasBankAccountNumber,
   hasURLsNeedingVerification,
-  shouldEnableWebSearch,
+  needsWebSearchVerification,
   getWebSearchReasons
 } from '../fraudDetection';
 
 describe('fraudDetection', () => {
-  describe('hasNorwegianPhoneNumbers', () => {
+  describe('hasNorwegianPhoneNumber', () => {
     it('should detect Norwegian phone numbers with spaces', () => {
-      expect(hasNorwegianPhoneNumbers('Ring oss på 23 45 67 89')).toBe(true);
+      expect(hasNorwegianPhoneNumber('Ring oss på 23 45 67 89')).toBe(true);
     });
 
     it('should detect Norwegian phone numbers without spaces', () => {
-      expect(hasNorwegianPhoneNumbers('Nummer: 23456789')).toBe(true);
+      expect(hasNorwegianPhoneNumber('Nummer: 23456789')).toBe(true);
     });
 
     it('should detect phone numbers with country code', () => {
-      expect(hasNorwegianPhoneNumbers('Call +47 23 45 67 89')).toBe(true);
+      expect(hasNorwegianPhoneNumber('Call +47 23 45 67 89')).toBe(true);
     });
 
     it('should detect phone numbers with alternative formats', () => {
-      expect(hasNorwegianPhoneNumbers('Kontakt: 23-45-67-89')).toBe(true);
+      expect(hasNorwegianPhoneNumber('Kontakt: 23-45-67-89')).toBe(true);
     });
 
     it('should not match invalid phone numbers', () => {
-      expect(hasNorwegianPhoneNumbers('1234')).toBe(false);
+      expect(hasNorwegianPhoneNumber('1234')).toBe(false);
     });
 
     it('should not match random 8-digit numbers', () => {
-      expect(hasNorwegianPhoneNumbers('Order #12345678')).toBe(false);
+      expect(hasNorwegianPhoneNumber('Order #12345678')).toBe(false);
     });
   });
 
-  describe('hasNorwegianBrands', () => {
+  describe('mentionsNorwegianBrands', () => {
     it('should detect DNB mentions', () => {
-      expect(hasNorwegianBrands('Melding fra DNB')).toBe(true);
+      expect(mentionsNorwegianBrands('Melding fra DNB')).toBe(true);
     });
 
     it('should detect BankID mentions', () => {
-      expect(hasNorwegianBrands('Bekreft med BankID')).toBe(true);
+      expect(mentionsNorwegianBrands('Bekreft med BankID')).toBe(true);
     });
 
     it('should detect Vipps mentions', () => {
-      expect(hasNorwegianBrands('Betal med Vipps')).toBe(true);
+      expect(mentionsNorwegianBrands('Betal med Vipps')).toBe(true);
     });
 
     it('should detect SpareBank mentions', () => {
-      expect(hasNorwegianBrands('Fra SpareBank 1')).toBe(true);
+      expect(mentionsNorwegianBrands('Fra SpareBank 1')).toBe(true);
     });
 
     it('should detect Nordea mentions', () => {
-      expect(hasNorwegianBrands('Nordea kundeservice')).toBe(true);
+      expect(mentionsNorwegianBrands('Nordea kundeservice')).toBe(true);
     });
 
     it('should detect Posten mentions', () => {
-      expect(hasNorwegianBrands('Pakke fra Posten')).toBe(true);
+      expect(mentionsNorwegianBrands('Pakke fra Posten')).toBe(true);
     });
 
     it('should be case-insensitive', () => {
-      expect(hasNorwegianBrands('dnb vipps BANKID')).toBe(true);
+      expect(mentionsNorwegianBrands('dnb vipps BANKID')).toBe(true);
     });
 
     it('should not match generic text', () => {
-      expect(hasNorwegianBrands('Just some regular text')).toBe(false);
+      expect(mentionsNorwegianBrands('Just some regular text')).toBe(false);
     });
   });
 
@@ -115,35 +115,38 @@ describe('fraudDetection', () => {
     });
   });
 
-  describe('shouldEnableWebSearch', () => {
+  describe('needsWebSearchVerification', () => {
     it('should enable web search for minimal context URLs', () => {
-      expect(shouldEnableWebSearch('https://suspicious-site.tk')).toBe(true);
+      expect(needsWebSearchVerification('https://suspicious-site.tk')).toBe(true);
     });
 
     it('should enable web search when phone numbers present', () => {
-      expect(shouldEnableWebSearch('Ring 23 45 67 89 for hjelp')).toBe(true);
+      expect(needsWebSearchVerification('Ring 23 45 67 89 for hjelp')).toBe(true);
     });
 
     it('should enable web search when Norwegian brands mentioned', () => {
-      expect(shouldEnableWebSearch('Melding fra DNB')).toBe(true);
+      expect(needsWebSearchVerification('Melding fra DNB')).toBe(true);
     });
 
     it('should enable web search when bank accounts mentioned', () => {
-      expect(shouldEnableWebSearch('Overfør til konto 1234.56.78901')).toBe(true);
+      expect(needsWebSearchVerification('Overfør til konto 1234.56.78901')).toBe(true);
     });
 
     it('should not enable for generic text without indicators', () => {
-      expect(shouldEnableWebSearch('This is just regular text')).toBe(false);
+      expect(needsWebSearchVerification('This is just regular text')).toBe(false);
     });
 
     it('should enable when context has imageData', () => {
       const context = { imageData: { base64: 'abc123', mimeType: 'image/png' } };
-      expect(shouldEnableWebSearch('Some text', context)).toBe(true);
+      const text = 'Some text';
+      // needsWebSearchVerification only checks text content, context is passed to getWebSearchReasons
+      const reasons = getWebSearchReasons(text, context);
+      expect(reasons.length).toBeGreaterThan(0);
     });
 
     it('should handle multiple indicators', () => {
       const text = 'DNB ber deg ringe 23 45 67 89 eller besøk https://dnb.no';
-      expect(shouldEnableWebSearch(text)).toBe(true);
+      expect(needsWebSearchVerification(text)).toBe(true);
     });
   });
 
@@ -197,11 +200,11 @@ describe('fraudDetection', () => {
         Oppgi kontonummer: 1234.56.78901
       `;
 
-      expect(hasNorwegianBrands(phishing)).toBe(true);
-      expect(hasNorwegianPhoneNumbers(phishing)).toBe(true);
+      expect(mentionsNorwegianBrands(phishing)).toBe(true);
+      expect(hasNorwegianPhoneNumber(phishing)).toBe(true);
       expect(hasBankAccountNumber(phishing)).toBe(true);
       expect(hasURLsNeedingVerification(phishing)).toBe(true);
-      expect(shouldEnableWebSearch(phishing)).toBe(true);
+      expect(needsWebSearchVerification(phishing)).toBe(true);
 
       const reasons = getWebSearchReasons(phishing);
       expect(reasons.length).toBeGreaterThanOrEqual(4);
@@ -215,8 +218,8 @@ describe('fraudDetection', () => {
         Her finner du alt du trenger for hjemmet.
       `;
 
-      expect(hasNorwegianBrands(legitimate)).toBe(false);
-      expect(hasNorwegianPhoneNumbers(legitimate)).toBe(false);
+      expect(mentionsNorwegianBrands(legitimate)).toBe(false);
+      expect(hasNorwegianPhoneNumber(legitimate)).toBe(false);
       expect(hasBankAccountNumber(legitimate)).toBe(false);
       // URL has sufficient context, so should not need verification
       expect(hasURLsNeedingVerification(legitimate)).toBe(false);
@@ -225,10 +228,10 @@ describe('fraudDetection', () => {
     it('should detect mixed indicators correctly', () => {
       const mixed = 'Kontakt SpareBank på 23456789 for konto 1234.56.78901';
 
-      expect(hasNorwegianBrands(mixed)).toBe(true);
-      expect(hasNorwegianPhoneNumbers(mixed)).toBe(true);
+      expect(mentionsNorwegianBrands(mixed)).toBe(true);
+      expect(hasNorwegianPhoneNumber(mixed)).toBe(true);
       expect(hasBankAccountNumber(mixed)).toBe(true);
-      expect(shouldEnableWebSearch(mixed)).toBe(true);
+      expect(needsWebSearchVerification(mixed)).toBe(true);
     });
 
     it('should handle edge case with legitimate DNB reference', () => {
@@ -238,8 +241,8 @@ describe('fraudDetection', () => {
         Kan dere hjelpe meg?
       `;
 
-      expect(hasNorwegianBrands(legitimate)).toBe(true);
-      expect(shouldEnableWebSearch(legitimate)).toBe(true);
+      expect(mentionsNorwegianBrands(legitimate)).toBe(true);
+      expect(needsWebSearchVerification(legitimate)).toBe(true);
 
       const reasons = getWebSearchReasons(legitimate);
       // Should recommend web search for brand verification
@@ -249,29 +252,29 @@ describe('fraudDetection', () => {
 
   describe('Edge cases', () => {
     it('should handle empty input', () => {
-      expect(hasNorwegianPhoneNumbers('')).toBe(false);
-      expect(hasNorwegianBrands('')).toBe(false);
+      expect(hasNorwegianPhoneNumber('')).toBe(false);
+      expect(mentionsNorwegianBrands('')).toBe(false);
       expect(hasBankAccountNumber('')).toBe(false);
       expect(hasURLsNeedingVerification('')).toBe(false);
-      expect(shouldEnableWebSearch('')).toBe(false);
+      expect(needsWebSearchVerification('')).toBe(false);
       expect(getWebSearchReasons('').length).toBe(0);
     });
 
     it('should handle special characters', () => {
-      expect(hasNorwegianPhoneNumbers('!!!###$$$')).toBe(false);
+      expect(hasNorwegianPhoneNumber('!!!###$$$')).toBe(false);
     });
 
     it('should handle very long input', () => {
       const longText = 'a'.repeat(10000) + 'DNB' + 'b'.repeat(10000);
-      expect(hasNorwegianBrands(longText)).toBe(true);
+      expect(mentionsNorwegianBrands(longText)).toBe(true);
     });
 
     it('should handle Unicode characters', () => {
-      expect(hasNorwegianBrands('DNB med æøå')).toBe(true);
+      expect(mentionsNorwegianBrands('DNB med æøå')).toBe(true);
     });
 
     it('should be case-insensitive for all checks', () => {
-      expect(hasNorwegianBrands('dnb VIPPS bankid')).toBe(true);
+      expect(mentionsNorwegianBrands('dnb VIPPS bankid')).toBe(true);
     });
   });
 });
