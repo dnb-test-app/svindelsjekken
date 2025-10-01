@@ -69,10 +69,6 @@ export function checkWebVerificationNeeds(text: string): {
   const needsVerification = needsWebSearchVerification(text);
   const reasons = needsVerification ? getWebSearchReasons(text) : [];
 
-  if (needsVerification) {
-    console.log("Web verification needed:", reasons);
-  }
-
   return {
     needsVerification,
     reasons,

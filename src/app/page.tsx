@@ -116,7 +116,7 @@ export default function Home() {
 
         if (response.ok) {
           const data = await response.json();
-          console.log(
+          console.info(
             `Fetched ${data.totalModels} models (${data.verifiedCount} verified)`,
           );
 
@@ -418,8 +418,6 @@ export default function Home() {
   };
 
   const handleModelChange = (e: any) => {
-    console.log("Dropdown change event:", e); // Debug logging
-
     // DNB Dropdown passes { data: { value, content, ... } }
     let model = null;
 
@@ -431,11 +429,7 @@ export default function Home() {
       model = e.value;
     }
 
-    console.log("Extracted model:", model); // Debug logging
-    console.log("Current selectedModel:", selectedModel); // Debug logging
-
     if (model && model !== selectedModel) {
-      console.log("Setting pendingModel to:", model); // Debug logging
       setPendingModel(model);
     }
   };
