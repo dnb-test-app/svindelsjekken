@@ -16,6 +16,9 @@ export interface UseImageUploadReturn {
   ocrProgress: number;
   isDragging: boolean;
   fileInputRef: React.RefObject<HTMLInputElement>;
+  errorDialogOpen: boolean;
+  errorDialogTitle: string;
+  errorDialogMessage: string;
 
   // Actions
   setImagePreview: (preview: string | null) => void;
@@ -27,6 +30,7 @@ export interface UseImageUploadReturn {
   handlePaste: (event: React.ClipboardEvent) => Promise<void>;
   handleRemoveImage: () => void;
   processImageWithOCR: (file: File) => Promise<void>;
+  closeErrorDialog: () => void;
 }
 
 /**
@@ -40,6 +44,25 @@ export function useImageUpload(): UseImageUploadReturn {
   const [ocrProgress, setOcrProgress] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [errorDialogTitle, setErrorDialogTitle] = useState('');
+  const [errorDialogMessage, setErrorDialogMessage] = useState('');
+
+  /**
+   * Show error dialog with title and message
+   */
+  const showError = (title: string, message: string) => {
+    setErrorDialogTitle(title);
+    setErrorDialogMessage(message);
+    setErrorDialogOpen(true);
+  };
+
+  /**
+   * Close error dialog
+   */
+  const closeErrorDialog = () => {
+    setErrorDialogOpen(false);
+  };
 
   /**
    * Process image with OCR
@@ -58,7 +81,7 @@ export function useImageUpload(): UseImageUploadReturn {
       setOcrProgress(100);
     } catch (error) {
       console.error('OCR failed:', error);
-      alert('Kunne ikke lese tekst fra bildet. Du kan fortsatt analysere bildet.');
+      showError('OCR-feil', 'Kunne ikke lese tekst fra bildet. Du kan fortsatt analysere bildet.');
       setOcrText('');
     } finally {
       setIsProcessingImage(false);
@@ -79,15 +102,16 @@ export function useImageUpload(): UseImageUploadReturn {
     const supportedTypes = [...supportedImageTypes, ...supportedDocTypes];
 
     if (!supportedTypes.includes(file.type)) {
-      alert(
-        'Ugyldig filtype. Støttede formater: PNG, JPG, JPEG, HEIC, HEIF, PDF'
+      showError(
+        'Ugyldig filtype',
+        'Støttede formater: PNG, JPG, JPEG, HEIC, HEIF, PDF'
       );
       return;
     }
 
     // Validate file size
     if (file.size > FILE_UPLOAD.MAX_SIZE_BYTES) {
-      alert(`Filen er for stor. Maksimal størrelse er ${FILE_UPLOAD.MAX_SIZE_MB}MB.`);
+      showError('Filen er for stor', `Filen du prøver å laste opp er for stor. Maksimal størrelse er ${FILE_UPLOAD.MAX_SIZE_MB} MB.`);
       return;
     }
 
@@ -125,7 +149,7 @@ export function useImageUpload(): UseImageUploadReturn {
 
         // Validate file size
         if (file.size > FILE_UPLOAD.MAX_SIZE_BYTES) {
-          alert(`Bildet er for stort. Maksimal størrelse er ${FILE_UPLOAD.MAX_SIZE_MB}MB.`);
+          showError('Bildet er for stort', `Bildet du prøver å laste opp er for stort. Maksimal størrelse er ${FILE_UPLOAD.MAX_SIZE_MB} MB.`);
           return;
         }
 
@@ -163,6 +187,9 @@ export function useImageUpload(): UseImageUploadReturn {
     ocrProgress,
     isDragging,
     fileInputRef,
+    errorDialogOpen,
+    errorDialogTitle,
+    errorDialogMessage,
 
     // Actions
     setImagePreview,
@@ -174,6 +201,7 @@ export function useImageUpload(): UseImageUploadReturn {
     handlePaste,
     handleRemoveImage,
     processImageWithOCR,
+    closeErrorDialog,
   };
 }
 

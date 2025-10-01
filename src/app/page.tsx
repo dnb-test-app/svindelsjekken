@@ -16,6 +16,7 @@ import Stepper, { useStepperState } from "@/components/Stepper";
 import AnalysisStep from "@/components/AnalysisStep";
 import ResultsStep from "@/components/ResultsStep";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import ErrorDialog from "@/components/ErrorDialog";
 import { isMinimalContextURL } from "@/lib/urlAnalyzer";
 import {
   needsWebSearchVerification,
@@ -518,7 +519,7 @@ export default function Home() {
         .map((m) => m.id);
 
       if (modelsToTest.length === 0) {
-        alert("No models to test!");
+        console.warn("No models to test!");
         return;
       }
 
@@ -573,13 +574,12 @@ export default function Home() {
           }),
         );
 
-        alert(
-          `Tested ${data.statistics.totalTested} models:\n${data.statistics.working} working\n${data.statistics.withJsonSupport} with JSON support`,
+        console.info(
+          `Tested ${data.statistics.totalTested} models: ${data.statistics.working} working, ${data.statistics.withJsonSupport} with JSON support`,
         );
       }
     } catch (error) {
       console.error("Batch test failed:", error);
-      alert("Batch testing failed!");
     } finally {
       setBatchTesting(false);
     }
@@ -1014,6 +1014,14 @@ export default function Home() {
           v{APP.VERSION} • To-fase domene-verifisering, forbedret BankID/Vipps-beskyttelse
         </p>
       </footer>
+
+      {/* Error Dialog */}
+      <ErrorDialog
+        title={imageUpload.errorDialogTitle}
+        message={imageUpload.errorDialogMessage}
+        open={imageUpload.errorDialogOpen}
+        onClose={imageUpload.closeErrorDialog}
+      />
     </div>
   );
 }
