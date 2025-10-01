@@ -17,6 +17,7 @@ import AnalysisStep from "@/components/AnalysisStep";
 import ResultsStep from "@/components/ResultsStep";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import ErrorDialog from "@/components/ErrorDialog";
+import AdminModeSelector from "@/components/AdminModeSelector";
 import { isMinimalContextURL } from "@/lib/urlAnalyzer";
 import {
   needsWebSearchVerification,
@@ -650,274 +651,27 @@ export default function Home() {
 
             {/* Hidden Model Selector - Easter Egg */}
             {showModelSelector && (
-              <div
-                style={{
-                  marginTop: "var(--spacing-small)",
-                  marginBottom: "var(--spacing-small)",
+              <AdminModeSelector
+                selectedModel={selectedModel}
+                defaultModel={defaultModel}
+                availableModels={availableModels}
+                isLoadingModels={isLoadingModels}
+                modelFilter={modelFilter}
+                setModelFilter={setModelFilter}
+                onModelSelect={(modelId) => {
+                  setSelectedModel(modelId);
+                  setHasUserSelectedModel(true);
+                  localStorage.setItem(STORAGE_KEYS.SELECTED_MODEL, modelId);
                 }}
-              >
-                {/* Admin Mode Indicator */}
-                <div
-                  style={{
-                    backgroundColor: "var(--color-signal-orange)",
-                    color: "white",
-                    padding: "var(--spacing-x-small) var(--spacing-small)",
-                    borderRadius: "4px",
-                    marginBottom: "var(--spacing-small)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    fontSize: "0.875rem",
-                    fontWeight: "bold",
-                  }}
-                >
-                  <span>
-                    🔧 Admin Mode Active - Model:{" "}
-                    {selectedModel.split("/")[1] || selectedModel}
-                  </span>
-                  <Button
-                    size="small"
-                    variant="tertiary"
-                    style={{ color: "white", border: "1px solid white" }}
-                    onClick={() => {
-                      setShowModelSelector(false);
-                      setSelectedModel(defaultModel);
-                      setHasUserSelectedModel(false);
-                      localStorage.removeItem(STORAGE_KEYS.SELECTED_MODEL);
-                      setPendingModel("");
-                      analysisState.setText(""); // Clear the rairai text
-                    }}
-                  >
-                    Exit Admin Mode
-                  </Button>
-                </div>
-
-                {isLoadingModels ? (
-                  <div
-                    style={{
-                      padding: "var(--spacing-medium)",
-                      textAlign: "center",
-                    }}
-                  >
-                    <P>Laster tilgjengelige modeller...</P>
-                  </div>
-                ) : availableModels.length > 0 ? (
-                  <div
-                    style={{
-                      backgroundColor: "var(--color-white)",
-                      border: "1px solid var(--color-black-20)",
-                      borderRadius: "8px",
-                      padding: "var(--spacing-medium)",
-                      marginBottom: "var(--spacing-medium)",
-                    }}
-                  >
-                    <P
-                      style={{
-                        marginBottom: "var(--spacing-small)",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      AI Model Selection ({availableModels.length} available):
-                    </P>
-
-                    {/* Search input */}
-                    <div style={{ marginBottom: "var(--spacing-small)" }}>
-                      <Input
-                        placeholder="Search models (e.g., gpt-4, claude, gemini)..."
-                        value={modelFilter}
-                        onChange={(e) => setModelFilter((e.target as HTMLInputElement).value)}
-                        size="medium"
-                        icon="search"
-                        icon_position="left"
-                        style={{
-                          width: "100%",
-                        } as React.CSSProperties}
-                      />
-                    </div>
-
-                    {/* Current selection */}
-                    <div
-                      style={{
-                        marginBottom: "var(--spacing-small)",
-                        padding: "var(--spacing-small)",
-                        backgroundColor: "var(--color-mint-green-12)",
-                        borderRadius: "4px",
-                        border: "1px solid var(--color-sea-green-30)",
-                      }}
-                    >
-                      <P size="small" style={{ margin: 0 }}>
-                        <strong>Current:</strong>{" "}
-                        {(() => {
-                          const current = availableModels.find(
-                            (m) => m.id === selectedModel,
-                          );
-                          if (!current) return selectedModel;
-
-                          let schemaSupport = "";
-                          if (current.supportsNativeJSONSchema) {
-                            schemaSupport = " 🎯 Native Schema";
-                          } else if (current.supportsStructuredOutput) {
-                            schemaSupport = " 📋 Structured";
-                          } else if (current.supportsJson) {
-                            schemaSupport = " ✅ JSON";
-                          }
-
-                          return `${current.name || getModelName(current.id)} (${current.provider})${schemaSupport}`;
-                        })()}
-                      </P>
-                    </div>
-
-                    {/* Model dropdown */}
-                    <div
-                      style={{
-                        maxHeight: "200px",
-                        overflowY: "auto",
-                        border: "1px solid var(--color-black-20)",
-                        borderRadius: "4px",
-                      }}
-                    >
-                      {availableModels
-                        .filter(
-                          (model) =>
-                            modelFilter === "" ||
-                            model.id
-                              .toLowerCase()
-                              .includes(modelFilter.toLowerCase()) ||
-                            model.name
-                              ?.toLowerCase()
-                              .includes(modelFilter.toLowerCase()) ||
-                            model.provider
-                              ?.toLowerCase()
-                              .includes(modelFilter.toLowerCase()),
-                        )
-                        .slice(0, UI.MAX_VISIBLE_MODELS)
-                        .map((model: any) => (
-                          <div
-                            key={model.id}
-                            style={{
-                              padding: "var(--spacing-small)",
-                              borderBottom: "1px solid var(--color-black-8)",
-                              cursor: "pointer",
-                              backgroundColor:
-                                selectedModel === model.id
-                                  ? "var(--color-sea-green-8)"
-                                  : "transparent",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                            }}
-                            onClick={() => {
-                              setSelectedModel(model.id);
-                              setHasUserSelectedModel(true);
-                              localStorage.setItem("selectedAIModel", model.id);
-                            }}
-                            onMouseEnter={(e) => {
-                              if (selectedModel !== model.id) {
-                                e.currentTarget.style.backgroundColor =
-                                  "var(--color-black-4)";
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (selectedModel !== model.id) {
-                                e.currentTarget.style.backgroundColor =
-                                  "transparent";
-                              }
-                            }}
-                          >
-                            <div>
-                              <div
-                                style={{
-                                  fontWeight:
-                                    selectedModel === model.id
-                                      ? "bold"
-                                      : "normal",
-                                }}
-                              >
-                                {model.name ||
-                                  model.id.split("/")[1] ||
-                                  model.id}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: "0.75rem",
-                                  color: "var(--color-black-60)",
-                                  marginTop: "2px",
-                                }}
-                              >
-                                {model.provider} • {model.cost || "unknown"}{" "}
-                                cost • {model.speed || "unknown"} speed
-                              </div>
-                            </div>
-                            <div style={{ fontSize: "0.75rem" }}>
-                              {model.supportsNativeJSONSchema && (
-                                <span title="Native JSON Schema Support">
-                                  🎯
-                                </span>
-                              )}
-                              {model.supportsStructuredOutput &&
-                                !model.supportsNativeJSONSchema && (
-                                  <span title="Structured Output Support">
-                                    📋
-                                  </span>
-                                )}
-                              {model.supportsJson &&
-                                !model.supportsStructuredOutput && (
-                                  <span title="Basic JSON Support">✅</span>
-                                )}
-                              {model.status === "verified" && (
-                                <span title="Verified working"> ⚡</span>
-                              )}
-                              {selectedModel === model.id && (
-                                <span
-                                  style={{ color: "var(--color-sea-green)" }}
-                                >
-                                  {" "}
-                                  ●
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-
-                      {availableModels.filter(
-                        (model) =>
-                          modelFilter === "" ||
-                          model.id
-                            .toLowerCase()
-                            .includes(modelFilter.toLowerCase()) ||
-                          model.name
-                            ?.toLowerCase()
-                            .includes(modelFilter.toLowerCase()) ||
-                          model.provider
-                            ?.toLowerCase()
-                            .includes(modelFilter.toLowerCase()),
-                      ).length > 50 && (
-                        <div
-                          style={{
-                            padding: "var(--spacing-small)",
-                            textAlign: "center",
-                            color: "var(--color-black-60)",
-                            fontSize: "0.875rem",
-                          }}
-                        >
-                          Showing first {UI.MAX_VISIBLE_MODELS} results. Use search to narrow down.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      padding: "var(--spacing-medium)",
-                      textAlign: "center",
-                      border: "1px solid var(--color-black-20)",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <P>Ingen modeller tilgjengelig</P>
-                  </div>
-                )}
-              </div>
+                onExitAdminMode={() => {
+                  setShowModelSelector(false);
+                  setSelectedModel(defaultModel);
+                  setHasUserSelectedModel(false);
+                  localStorage.removeItem(STORAGE_KEYS.SELECTED_MODEL);
+                  setPendingModel("");
+                  analysisState.setText(""); // Clear the rairai text
+                }}
+              />
             )}
           </div>
         )}
