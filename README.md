@@ -2,7 +2,7 @@
 
 A modern web application for fraud detection built with Next.js and the DNB Eufemia design system.
 
-## Features
+## Features 
 
 ### Core Functionality
 - **AI-Powered Analysis**: Advanced fraud detection using multiple AI models via OpenRouter API
