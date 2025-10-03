@@ -37,7 +37,13 @@ import {
 } from "@/lib/utils/analysisHelpers";
 import { useImageUpload } from "@/hooks/useImageUpload";
 import { useAnalysisState } from "@/hooks/useAnalysisState";
-import { FILE_UPLOAD, ANALYSIS, STORAGE_KEYS, UI, APP } from "@/lib/constants/appConstants";
+import {
+  FILE_UPLOAD,
+  ANALYSIS,
+  STORAGE_KEYS,
+  UI,
+  APP,
+} from "@/lib/constants/appConstants";
 
 export default function Home() {
   // Custom hooks for state management
@@ -70,7 +76,9 @@ export default function Home() {
   // Load saved model preference and test results
   useEffect(() => {
     // Load test results from localStorage
-    const savedTestResults = localStorage.getItem(STORAGE_KEYS.MODEL_TEST_RESULTS);
+    const savedTestResults = localStorage.getItem(
+      STORAGE_KEYS.MODEL_TEST_RESULTS,
+    );
     if (savedTestResults) {
       try {
         setModelTestResults(JSON.parse(savedTestResults));
@@ -140,7 +148,10 @@ export default function Home() {
             );
             if (!currentModelAvailable && data.recommended) {
               setSelectedModel(data.recommended.id);
-              localStorage.setItem(STORAGE_KEYS.SELECTED_MODEL, data.recommended.id);
+              localStorage.setItem(
+                STORAGE_KEYS.SELECTED_MODEL,
+                data.recommended.id,
+              );
             }
           }
         } else {
@@ -157,7 +168,10 @@ export default function Home() {
 
   // Easter egg: Check for "RaiRai" in text
   useEffect(() => {
-    if (analysisState.text.toLowerCase().includes("rairai") && !showModelSelector) {
+    if (
+      analysisState.text.toLowerCase().includes("rairai") &&
+      !showModelSelector
+    ) {
       setShowModelSelector(true);
       fetchAvailableModels(); // Fetch models when admin mode is activated
     }
@@ -169,7 +183,6 @@ export default function Home() {
     analysisState.setUrlDetected(hasMinimalContextURL);
   }, [analysisState.text]);
 
-
   const handleCheck = async () => {
     // Initialize state
     analysisState.setIsAnalyzing(true);
@@ -180,10 +193,14 @@ export default function Home() {
     const analysisText = analysisState.text.replace(/rairai/gi, "").trim();
 
     // Prepare image data if file was uploaded
-    const imageData = await prepareImageData(imageUpload.uploadedFile, imageUpload.setOcrProgress);
+    const imageData = await prepareImageData(
+      imageUpload.uploadedFile,
+      imageUpload.setOcrProgress,
+    );
 
     // Check if web verification is needed
-    const { needsVerification, reasons } = checkWebVerificationNeeds(analysisText);
+    const { needsVerification, reasons } =
+      checkWebVerificationNeeds(analysisText);
     if (needsVerification) {
       analysisState.setIsWebVerifying(true);
     }
@@ -204,9 +221,15 @@ export default function Home() {
 
     // Prepare analysis request
     try {
-      const baseModel = typeof selectedModel === "string" ? selectedModel : defaultModel;
+      const baseModel =
+        typeof selectedModel === "string" ? selectedModel : defaultModel;
       const modelToUse = needsVerification ? `${baseModel}:online` : baseModel;
-      const context = buildAnalysisContext(imageData, imageUpload.ocrText, analysisState.additionalContext, analysisState.urlDetected);
+      const context = buildAnalysisContext(
+        imageData,
+        imageUpload.ocrText,
+        analysisState.additionalContext,
+        analysisState.urlDetected,
+      );
 
       // Call analysis API
       const response = await fetch("/api/analyze", {
@@ -224,7 +247,9 @@ export default function Home() {
         const errorText = await response.text();
         console.error("API error:", errorText);
 
-        const { result: errorResult, error: errorMsg } = createErrorResult(response.status);
+        const { result: errorResult, error: errorMsg } = createErrorResult(
+          response.status,
+        );
         analysisState.setResult(errorResult);
         analysisState.setAiAnalysis({ error: errorMsg });
       } else {
@@ -284,7 +309,12 @@ export default function Home() {
     refinementContext: string,
   ) => {
     // Allow refinement if we have either sufficient text OR an image
-    if ((!analysisState.text || analysisState.text.trim().length < ANALYSIS.MIN_TEXT_LENGTH) && !imageUpload.imagePreview) return;
+    if (
+      (!analysisState.text ||
+        analysisState.text.trim().length < ANALYSIS.MIN_TEXT_LENGTH) &&
+      !imageUpload.imagePreview
+    )
+      return;
 
     analysisState.setIsAnalyzing(true);
     analysisState.setAiAnalysis(null);
@@ -298,7 +328,8 @@ export default function Home() {
     const refinedText = cleanedText;
 
     try {
-      const modelToUse = typeof selectedModel === "string" ? selectedModel : defaultModel;
+      const modelToUse =
+        typeof selectedModel === "string" ? selectedModel : defaultModel;
 
       // Combine URL context with refinement context
       let combinedContext = refinementContext;
@@ -351,11 +382,14 @@ export default function Home() {
 
         let errorMessage = "AI-analyse utilgjengelig.";
         let recommendation = "Analyse utilgjengelig - vær ekstra forsiktig";
-        let summary = "Kunne ikke analysere innholdet på grunn av tekniske problemer";
+        let summary =
+          "Kunne ikke analysere innholdet på grunn av tekniske problemer";
 
         if (response.status === 429) {
-          errorMessage = "For mange forespørsler. Vennligst vent et øyeblikk og prøv igjen.";
-          recommendation = "Vent og prøv igjen - vær ekstra forsiktig i mellomtiden";
+          errorMessage =
+            "For mange forespørsler. Vennligst vent et øyeblikk og prøv igjen.";
+          recommendation =
+            "Vent og prøv igjen - vær ekstra forsiktig i mellomtiden";
           summary = "Midlertidig utilgjengelig på grunn av høy trafikk";
         }
 
@@ -379,11 +413,12 @@ export default function Home() {
           category: aiResult.category || "info",
           score: aiResult.fraudProbability || 0,
           risk: aiResult.riskLevel || "low",
-          triggers: aiResult.mainIndicators?.map((ind: string) => ({
-            pattern: ind,
-            category: "ai_detected",
-            weight: 10,
-          })) || [],
+          triggers:
+            aiResult.mainIndicators?.map((ind: string) => ({
+              pattern: ind,
+              category: "ai_detected",
+              weight: 10,
+            })) || [],
           categories: ["ai_analysis"],
           aiEnhanced: true,
           recommendation: aiResult.recommendation,
@@ -409,7 +444,8 @@ export default function Home() {
         categories: [],
         fallbackMode: true,
         recommendation: "Analyse feilet - vær ekstra forsiktig",
-        summary: "Kunne ikke analysere innholdet på grunn av tekniske problemer",
+        summary:
+          "Kunne ikke analysere innholdet på grunn av tekniske problemer",
       });
       analysisState.setAiAnalysis({ error: "AI-analyse feilet." });
     }
@@ -478,7 +514,10 @@ export default function Home() {
         };
 
         setModelTestResults(newResults);
-        localStorage.setItem(STORAGE_KEYS.MODEL_TEST_RESULTS, JSON.stringify(newResults));
+        localStorage.setItem(
+          STORAGE_KEYS.MODEL_TEST_RESULTS,
+          JSON.stringify(newResults),
+        );
 
         // Update available models with test result
         setAvailableModels((prev) =>
@@ -547,7 +586,10 @@ export default function Home() {
         });
 
         setModelTestResults(newResults);
-        localStorage.setItem(STORAGE_KEYS.MODEL_TEST_RESULTS, JSON.stringify(newResults));
+        localStorage.setItem(
+          STORAGE_KEYS.MODEL_TEST_RESULTS,
+          JSON.stringify(newResults),
+        );
 
         // Update available models with test results
         setAvailableModels((prev) =>
@@ -707,15 +749,18 @@ export default function Home() {
             </div>
 
             {/* Context Refinement */}
-            {analysisState.aiAnalysis && analysisState.aiAnalysis.followUpQuestions && (
-              <ErrorBoundary>
-                <ContextRefinement
-                  followUpQuestions={analysisState.aiAnalysis.followUpQuestions}
-                  onRefineAnalysis={handleRefineAnalysis}
-                  isAnalyzing={analysisState.isAnalyzing}
-                />
-              </ErrorBoundary>
-            )}
+            {analysisState.aiAnalysis &&
+              analysisState.aiAnalysis.followUpQuestions && (
+                <ErrorBoundary>
+                  <ContextRefinement
+                    followUpQuestions={
+                      analysisState.aiAnalysis.followUpQuestions
+                    }
+                    onRefineAnalysis={handleRefineAnalysis}
+                    isAnalyzing={analysisState.isAnalyzing}
+                  />
+                </ErrorBoundary>
+              )}
 
             {/* Back to Step 1 button */}
             <div
@@ -755,11 +800,12 @@ export default function Home() {
       <footer className="footer">
         <p className="footer-text">
           {APP.NAME} • Ring oss på{" "}
-          <span className="footer-phone">{APP.SUPPORT_PHONE}</span> hvis du er usikker
+          <span className="footer-phone">{APP.SUPPORT_PHONE}</span> hvis du er
+          usikker
         </p>
         <p className="footer-copyright">© {new Date().getFullYear()} DNB</p>
         <p style={{ fontSize: "0.75rem", color: "#666", marginTop: "0.5rem" }}>
-          v{APP.VERSION} • To-fase domene-verifisering, forbedret BankID/Vipps-beskyttelse
+          v{APP.VERSION}
         </p>
       </footer>
 
