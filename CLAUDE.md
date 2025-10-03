@@ -795,21 +795,29 @@ chore(deps): oppgrader Next.js til 14.2.0
 - `(security)`: Sikkerhet
 
 ### Versjonering
-**VIKTIG**: Ved hver commit skal versjonsnummeret oppdateres i `package.json`:
-- Format: `YYYY-MM-DD.BUILD`
+**VIKTIG**: Ved hver commit skal versjonsnummeret oppdateres i **BEGGE** disse filene:
+1. `package.json` - linje 3
+2. `src/lib/constants/appConstants.ts` - linje 103 (APP.VERSION)
+
+**Format**: `YYYY-MM-DD.BUILD`
 - Dato: Dagens dato (bruk systemdato)
 - Build-nummer: Inkrementer fra forrige build samme dag (start på 1)
 
 Eksempel:
 ```json
-// Første commit 3. oktober 2025
+// package.json - Første commit 3. oktober 2025
 "version": "2025-10-03.1"
+
+// appConstants.ts
+VERSION: '2025-10-03.1'
 
 // Andre commit samme dag
 "version": "2025-10-03.2"
+VERSION: '2025-10-03.2'
 
 // Første commit neste dag
 "version": "2025-10-04.1"
+VERSION: '2025-10-04.1'
 ```
 
 ## 🚨 RECOVERY INSTRUCTIONS - VED DESIGN-BRUDD
