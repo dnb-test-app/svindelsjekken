@@ -794,6 +794,24 @@ chore(deps): oppgrader Next.js til 14.2.0
 - `(dark-mode)`: Mørk modus
 - `(security)`: Sikkerhet
 
+### Versjonering
+**VIKTIG**: Ved hver commit skal versjonsnummeret oppdateres i `package.json`:
+- Format: `YYYY-MM-DD.BUILD`
+- Dato: Dagens dato (bruk systemdato)
+- Build-nummer: Inkrementer fra forrige build samme dag (start på 1)
+
+Eksempel:
+```json
+// Første commit 3. oktober 2025
+"version": "2025-10-03.1"
+
+// Andre commit samme dag
+"version": "2025-10-03.2"
+
+// Første commit neste dag
+"version": "2025-10-04.1"
+```
+
 ## 🚨 RECOVERY INSTRUCTIONS - VED DESIGN-BRUDD
 
 ### HVIS DESIGNET ER ØDELAGT - GJØR DETTE UMIDDELBART:
