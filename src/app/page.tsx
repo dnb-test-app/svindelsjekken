@@ -803,9 +803,12 @@ export default function Home() {
           <span className="footer-phone">{APP.SUPPORT_PHONE}</span> hvis du er
           usikker
         </p>
-        <p className="footer-copyright">© {new Date().getFullYear()} DNB</p>
-        <p style={{ fontSize: "0.75rem", color: "#666", marginTop: "0.5rem" }}>
-          v{APP.VERSION}
+        <p>
+          <span className="footer-copyright">
+            © {new Date().getFullYear()} DNB
+          </span>
+          {" - "}
+          <span className="footer-version">v{APP.VERSION}</span>
         </p>
       </footer>
 
