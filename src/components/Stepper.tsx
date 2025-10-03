@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Space, P, Icon, Flex } from '@dnb/eufemia';
+import { Space, P, Flex } from '@dnb/eufemia';
 
 interface Step {
   id: number;
@@ -106,15 +106,7 @@ export default function Stepper({ steps, onStepClick, className = '' }: StepperP
                 justify="center"
                 style={getCircleStyle(step)}
               >
-                {step.isCompleted ? (
-                  <Icon
-                    icon="check"
-                    size="medium"
-                    style={{
-                      color: 'var(--color-white)'
-                    }}
-                  />
-                ) : step.isSkipped ? (
+                {step.isSkipped ? (
                   <span style={{
                     color: 'var(--color-black-40)',
                     fontSize: '18px',
@@ -124,7 +116,7 @@ export default function Stepper({ steps, onStepClick, className = '' }: StepperP
                   </span>
                 ) : (
                   <span style={{
-                    color: step.isActive ? 'var(--color-sea-green)' : 'var(--color-black-40)',
+                    color: step.isCompleted ? 'var(--color-white)' : step.isActive ? 'var(--color-sea-green)' : 'var(--color-black-40)',
                     fontSize: '18px',
                     fontWeight: 'bold'
                   }}>
@@ -168,6 +160,11 @@ export default function Stepper({ steps, onStepClick, className = '' }: StepperP
 export function useStepperState() {
   const [currentStep, setCurrentStep] = React.useState(1);
   const [completedSteps, setCompletedSteps] = React.useState<Set<number>>(new Set());
+
+  // Scroll to top whenever step changes
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentStep]);
 
   const markStepCompleted = (stepId: number) => {
     setCompletedSteps(prev => new Set([...prev, stepId]));

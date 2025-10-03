@@ -29,6 +29,7 @@ export function ErrorDialog({
       maxWidth="28rem"
       alignContent="centered"
       spacing={false}
+      triggerAttributes={{ style: { display: 'none' } }}
     >
       <Space top="large" bottom="large" left="large" right="large">
         <Flex.Vertical align="center">
