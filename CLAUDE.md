@@ -5,7 +5,7 @@ Dette dokumentet gir veiledning til Claude Code (claude.ai/code) når man arbeid
 
 ## 🚨 KRITISK: DESIGN LOCK - ALDRI MODIFISER 🚨
 
-### ⛔ DESIGNET ER LÅST - COMMIT d68b4d8 ER GODKJENT AV DNB
+### ⛔ DESIGNET ER LÅST - COMMIT a1167ca ER GODKJENT AV DNB
 
 **ADVARSEL**: Dette prosjektet bruker DNBs offisielle designsystem. Enhver avvik fra DNB Eufemia eller custom styling VIL ØDELEGGE PRODUKSJON og bryte kundetillit.
 
@@ -17,18 +17,29 @@ Dette dokumentet gir veiledning til Claude Code (claude.ai/code) når man arbeid
 5. **ALLTID** sammenlign med DNB.no FØR enhver endring
 6. **HVIS USIKKER**: IKKE ENDRE - spør først!
 
-### GODKJENT DESIGN-TILSTAND:
-- Commit: `d68b4d8c9e2a1f5b8d3e6f9a2c5e8b1d4f7a0c3e`
-- DNB Eufemia versjon: `10.80.0` (IKKE OPPGRADER)
+### GODKJENT DESIGN-REFERANSE:
+- Commit: `a1167ca` (feat: update version display in footer to use new date-based versioning)
+- DNB Eufemia versjon: `10.80.1` (IKKE OPPGRADER uten godkjenning)
 - Styling: 100% DNB-kompatibel
-- Testet mot: DNB.no produksjon september 2024
+- Testet mot: DNB.no produksjon oktober 2025
 
 ### VED BRUDD PÅ DESIGN:
+**VIKTIG**: Ikke bruk `git reset --hard` - dette vil ødelegge arbeid!
+
+I stedet, **RESTAURER DESIGNET** ved å:
 ```bash
-# UMIDDELBAR ROLLBACK
-git reset --hard d68b4d8
-bun install
-bun run dev
+# STEG 1: Se på godkjent design
+git show a1167ca
+
+# STEG 2: Sammenlign med nåværende tilstand
+git diff a1167ca -- src/app/globals.css
+git diff a1167ca -- src/components/
+
+# STEG 3: Identifiser design-avvik og RESTAURER til godkjent tilstand
+# Behold funksjonalitet, men match designet fra a1167ca eksakt
+# - Samme farger (DNB Sea Green #007272)
+# - Samme spacing (DNB tokens)
+# - Samme komponenter (DNB Eufemia)
 ```
 
 ## Prosjektoversikt
@@ -822,38 +833,51 @@ VERSION: '2025-10-04.1'
 
 ## 🚨 RECOVERY INSTRUCTIONS - VED DESIGN-BRUDD
 
-### HVIS DESIGNET ER ØDELAGT - GJØR DETTE UMIDDELBART:
+### HVIS DESIGNET ER ØDELAGT - RESTAURER TIL GODKJENT DESIGN:
+
+**VIKTIG**: IKKE bruk `git reset --hard` - dette ødelegger alt arbeid!
+
+I stedet, **RESTAURER DESIGNET** ved å matche godkjent tilstand (commit a1167ca):
 
 ```bash
 # STEG 1: STOPP ALT
 ctrl+c  # Stopp dev server
 
-# STEG 2: SJEKK CURRENT STATE
+# STEG 2: ANALYSER DESIGN-AVVIK
 git status
 git diff
 
-# STEG 3: ROLLBACK TIL GODKJENT DESIGN
-git reset --hard d68b4d8
-# ELLER hvis du har uncommitted changes du vil beholde:
-git stash
-git checkout d68b4d8
+# STEG 3: SAMMENLIGN MED GODKJENT DESIGN-REFERANSE
+git show a1167ca:src/app/globals.css > /tmp/approved-globals.css
+git diff --no-index /tmp/approved-globals.css src/app/globals.css
 
-# STEG 4: REINSTALLER DEPENDENCIES
-rm -rf node_modules bun.lock
-bun install
+# Sjekk komponenter
+git diff a1167ca -- src/components/
 
-# STEG 5: VERIFISER DNB EUFEMIA
-bun list | grep @dnb/eufemia  # Skal vise 10.80.0
+# Sjekk layout
+git diff a1167ca -- src/app/layout.tsx
 
-# STEG 6: START OG TEST
+# STEG 4: IDENTIFISER DESIGN-ENDRINGER
+# Se på forskjellene - hva er endret som ikke burde vært endret?
+# - Custom CSS lagt til?
+# - DNB farger overstyrt?
+# - Spacing endret?
+# - Andre UI-biblioteker importert?
+
+# STEG 5: RESTAURER DESIGN (BEHOLD FUNKSJONALITET)
+# For hver fil med design-avvik:
+# 1. Les godkjent versjon: git show a1167ca:path/to/file
+# 2. Rediger nåværende fil for å matche godkjent design
+# 3. Behold nye funksjoner, men med korrekt DNB styling
+
+# STEG 6: VERIFISER DNB EUFEMIA
+bun list | grep @dnb/eufemia  # Skal vise 10.80.1
+
+# STEG 7: TEST VISUELT
 bun run dev
 # Åpne http://localhost:3000
+# Sammenlign side-ved-side med commit a1167ca
 # Sammenlign med DNB.no
-
-# STEG 7: HVIS FORTSATT ØDELAGT
-git clean -fd  # Fjern alle untracked files
-git reset --hard d68b4d8
-bun install --frozen-lockfile  # Clean install
 ```
 
 ### VANLIGE DESIGN-FEIL OG LØSNINGER:
@@ -866,8 +890,13 @@ bun install --frozen-lockfile  # Clean install
 | Feil font | Sjekk at DNB Eufemia styles er importert |
 | Layout ødelagt | Verifiser at du bruker DNB Grid/Flex |
 
+### DESIGN-REFERANSE FOR RESTAURERING:
+- Git commit: `a1167ca` (feat: update version display in footer to use new date-based versioning)
+- Se design: `git show a1167ca`
+- Sammenlign: `git diff a1167ca`
+
 ### KONTAKT VED KRITISKE PROBLEMER:
-- Git history: Se commit d68b4d8 for working state
+- Git history: Se commit a1167ca for godkjent design
 - DNB Support: design.system@dnb.no
 - Slack: #dnb-design-system
 

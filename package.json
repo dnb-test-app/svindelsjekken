@@ -1,6 +1,6 @@
 {
   "name": "dnb-svindelsjekk",
-  "version": "2025-10-03.2",
+  "version": "2025-10-03.3",
   "private": true,
   "scripts": {
     "dev": "next dev",
