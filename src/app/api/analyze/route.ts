@@ -8,7 +8,6 @@ import {
   type FraudAnalysisResponse,
 } from "@/lib/schemas/fraudAnalysis.zod";
 import { sanitizeUserInput, validateInput } from "@/lib/security/promptSanitizer";
-import { detectInjectionAttempts } from "@/lib/security/injectionDetector";
 import { validateDNBContext, validateResponse } from "@/lib/security/responseValidator";
 import { logDebug, logInfo, logError, logWarn } from "@/lib/logger";
 import { createEnhancedFraudPrompt } from "@/lib/prompts/promptBuilder";
@@ -212,39 +211,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Step 2: Detect injection attempts in raw input
-    if (text.trim()) {
-      const injectionDetection = detectInjectionAttempts(text);
-
-      if (injectionDetection.severity === 'critical' || injectionDetection.severity === 'high') {
-        logWarn('Security threat detected in raw input', {
-          severity: injectionDetection.severity,
-          patterns: injectionDetection.patterns,
-          score: injectionDetection.score
-        });
-
-        return NextResponse.json({
-          category: 'fraud',
-          risk: 'high',
-          score: 100,
-          mainIndicators: ['Sikkerhetstrussel detektert'],
-          recommendation: 'Potensielt ondsinnet forespørsel blokkert. Kontakt DNB på 915 04800.',
-          summary: 'Sikkerhetsystemet blokkerte denne forespørselen.',
-          securityBlock: true,
-          requestId
-        });
-      }
-
-      // Log if injection detected but not blocked
-      if (injectionDetection.detected) {
-        logInfo('Injection patterns detected but allowed in raw input', {
-          severity: injectionDetection.severity,
-          patterns: injectionDetection.patterns
-        });
-      }
-    }
-
-    // Step 3: Sanitize raw input
+    // Step 2: Sanitize raw input
     if (text.trim()) {
       const sanitizationResult = sanitizeUserInput(text);
       if (sanitizationResult.blocked) {
@@ -425,7 +392,7 @@ export async function POST(request: NextRequest) {
         }),
       };
 
-      // Step 4: Validate AI response integrity
+      // Step 3: Validate AI response integrity
       const dnbValidation = validateDNBContext(aiAnalysis);
       if (!dnbValidation.valid) {
         logWarn('DNB context validation failed', { errors: dnbValidation.errors });
