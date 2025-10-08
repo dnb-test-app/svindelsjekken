@@ -4,7 +4,6 @@
  */
 
 import { fileToBase64 } from './fileHelpers';
-import { needsWebSearchVerification, getWebSearchReasons } from '@/lib/fraudDetection';
 import { ANALYSIS } from '@/lib/constants/appConstants';
 
 export interface ImageData {
@@ -59,19 +58,18 @@ export async function prepareImageData(
 
 /**
  * Check if web verification is needed
- * @param text - Text to analyze
- * @returns Object with needsVerification flag and reasons
+ * Always returns true - web search is always enabled, AI decides when to use it
+ * @param text - Text to analyze (unused, kept for API compatibility)
+ * @returns Object with needsVerification always true and empty reasons
  */
 export function checkWebVerificationNeeds(text: string): {
   needsVerification: boolean;
   reasons: string[];
 } {
-  const needsVerification = needsWebSearchVerification(text);
-  const reasons = needsVerification ? getWebSearchReasons(text) : [];
-
+  // Always enable web search - let AI decide when to use it based on prompt
   return {
-    needsVerification,
-    reasons,
+    needsVerification: true,
+    reasons: [],
   };
 }
 

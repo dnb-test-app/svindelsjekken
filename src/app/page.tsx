@@ -19,10 +19,6 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import ErrorDialog from "@/components/ErrorDialog";
 import AdminModeSelector from "@/components/AdminModeSelector";
 import { isMinimalContextURL } from "@/lib/urlAnalyzer";
-import {
-  needsWebSearchVerification,
-  getWebSearchReasons,
-} from "@/lib/fraudDetection";
 import { fileToBase64 } from "@/lib/utils/fileHelpers";
 import { getModelName } from "@/lib/utils/modelHelpers";
 import {

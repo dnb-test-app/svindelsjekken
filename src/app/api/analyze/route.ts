@@ -2,10 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseFraudAnalysis } from "@/lib/utils/jsonParser";
 import { isMinimalContextURL } from "@/lib/urlAnalyzer";
 import {
-  needsWebSearchVerification,
-  getWebSearchReasons,
-} from "@/lib/fraudDetection";
-import {
   fraudAnalysisJsonSchema,
   supportsStructuredOutput,
   supportsNativeJSONSchema,
@@ -324,12 +320,9 @@ export async function POST(request: NextRequest) {
     // Detect if this is a minimal context URL
     const hasMinimalContext = isMinimalContextURL(sanitizedText);
 
-    // Detect if web search verification would be helpful
-    const needsWebSearch =
-      needsWebSearchVerification(sanitizedText) || !!context?.imageData;
-    const webSearchReasons = needsWebSearch
-      ? getWebSearchReasons(sanitizedText, context)
-      : [];
+    // Always enable web search - let AI decide when to use it based on prompt instructions
+    const needsWebSearch = true;
+    const webSearchReasons: string[] = [];
 
     logDebug("Analysis flags", {
       hasMinimalContext,
