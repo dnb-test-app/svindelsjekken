@@ -66,6 +66,15 @@ interface ResultsStepProps {
   originalText?: string;
 }
 
+/**
+ * Get icon name based on analysis category
+ */
+function getCategoryIcon(category?: string): string {
+  if (category === 'fraud') return 'warning';
+  if (category === 'context-required') return 'help';
+  return 'information';
+}
+
 export default function ResultsStep({
   isAnalyzing,
   result,
@@ -227,7 +236,7 @@ export default function ResultsStep({
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
               }}>
                 <Icon
-                  name={aiAnalysis.category === 'fraud' ? 'warning' : aiAnalysis.category === 'context-required' ? 'help' : 'information'}
+                  name={getCategoryIcon(aiAnalysis.category)}
                   size="medium"
                   style={{ color: bannerStyle.iconColor }}
                 />

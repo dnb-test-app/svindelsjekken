@@ -10,6 +10,14 @@ interface ContextRefinementProps {
   isAnalyzing?: boolean;
 }
 
+/**
+ * Get icon for option button based on emoji or selection state
+ */
+function getOptionIcon(option: { emoji?: string; value: string }, currentAnswer: string | null): string {
+  if (option.emoji) return option.emoji;
+  return currentAnswer === option.value ? '✅' : '○';
+}
+
 export default function ContextRefinement({
   followUpQuestions,
   onRefineAnalysis,
@@ -148,7 +156,7 @@ export default function ContextRefinement({
                           disabled={isAnalyzing}
                           onClick={() => handleQuestionAnswer(questionObj.question, option.value)}
                         >
-                          {option.emoji ? option.emoji : (currentAnswer === option.value ? '✅' : '○')} {option.label}
+                          {getOptionIcon(option, currentAnswer)} {option.label}
                         </Button>
                       ))}
                     </div>

@@ -806,38 +806,72 @@ chore(deps): oppgrader Next.js til 14.2.0
 - `(security)`: Sikkerhet
 
 ### Versjonering
-**🚨 KRITISK**: Ved hver commit skal versjonsnummeret oppdateres i **BEGGE** disse filene:
-1. `package.json` - linje 3
-2. `src/lib/constants/appConstants.ts` - linje 103 (APP.VERSION)
+**🚨 KRITISK**: Version incrementing happens ONLY when pushing to remote repository.
 
 **Format**: `YYYY.MM-BUILD`
 - År.Måned: Dagens dato (bruk systemdato med `date +%Y.%m`)
-- Build-nummer: **ALLTID inkrementer fra forrige build** - ALDRI reset!
+- Build-nummer: **ALLTID inkrementer fra forrige PUSH** - ALDRI reset!
 
 **⛔ ABSOLUTT REGEL - ALDRI BRYT DENNE:**
 - **ALDRI reset build-nummeret** - ikke ved ny dag, ikke ved ny måned, ikke ved nytt år
-- **ALLTID inkrementer**: Hvis forrige versjon var `2025.10-5`, neste er `2025.10-6`
+- **ALDRI increment på vanlige commits** - kun ved push til remote
+- **ALLTID increment ved push**: Hvis forrige push var `2025.10-5`, neste push er `2025.10-6`
 - **SELV OM MÅNEDEN ENDRES**: `2025.10-99` → `2025.11-100` (IKKE 2025.11-1)
 - Build-nummeret skal kun øke, aldri synke eller resette
 
+**Workflow for å pushe til remote:**
+```bash
+# STEG 1: Sjekk nåværende versjon
+grep version package.json  # Viser f.eks. "2025.10-5"
+
+# STEG 2: Inkrementer build-nummer i BEGGE filer:
+# - package.json linje 3: "version": "2025.10-6"
+# - src/lib/constants/appConstants.ts linje 103: VERSION: '2025.10-6'
+
+# STEG 3: Amend til siste commit (IKKE ny commit)
+git add package.json src/lib/constants/appConstants.ts
+git commit --amend --no-edit
+
+# STEG 4: Tag commit med versjon
+git tag v2025.10-6
+
+# STEG 5: Push med tags
+git push && git push --tags
+```
+
+**Under utvikling (før push):**
+```bash
+# Gjør endringer
+git add .
+git commit -m "fix: some bug"  # Behold samme versjon (2025.10-5)
+
+# Gjør flere endringer
+git add .
+git commit -m "feat: new feature"  # Fortsatt samme versjon (2025.10-5)
+
+# Når klar for å pushe: ØK versjon til 2025.10-6, amend, tag, push
+```
+
 Eksempel:
 ```json
-// package.json - Versjon 5 i oktober 2025
-"version": "2025.10-5"
+// Under utvikling - versjon forblir 2025.10-5
+"version": "2025.10-5"  // Commit 1
+"version": "2025.10-5"  // Commit 2
+"version": "2025.10-5"  // Commit 3
 
-// appConstants.ts
-VERSION: '2025.10-5'
+// Ved push - inkrementer til 2025.10-6 og amend til siste commit
+"version": "2025.10-6"  // Tag og push
 
-// Neste commit samme måned
-"version": "2025.10-6"
-VERSION: '2025.10-6'
+// Neste utviklingssyklus - versjon forblir 2025.10-6
+"version": "2025.10-6"  // Commit 4
+"version": "2025.10-6"  // Commit 5
 
-// Commit i november (IKKE reset build!)
-"version": "2025.11-7"  // ← Fortsett å inkrementer
-VERSION: '2025.11-7'
+// Ved neste push - inkrementer til 2025.10-7
+"version": "2025.10-7"  // Tag og push
 
 // ALDRI gjør dette:
 "version": "2025.11-1"  // ❌ FEIL! Build resatt
+"version": "2025.10-8"  // ❌ FEIL på vanlig commit (kun ved push!)
 ```
 
 ## 🚨 RECOVERY INSTRUCTIONS - VED DESIGN-BRUDD

@@ -52,6 +52,12 @@ export default function Stepper({ steps, onStepClick, className = '' }: StepperP
     return 'var(--color-black-60)';
   };
 
+  const getStepNumberColor = (step: Step) => {
+    if (step.isCompleted) return 'var(--color-white)';
+    if (step.isActive) return 'var(--color-sea-green)';
+    return 'var(--color-black-40)';
+  };
+
   const getLineStyle = (step: Step) => {
     const baseStyle = {
       flex: 1,
@@ -116,7 +122,7 @@ export default function Stepper({ steps, onStepClick, className = '' }: StepperP
                   </span>
                 ) : (
                   <span style={{
-                    color: step.isCompleted ? 'var(--color-white)' : step.isActive ? 'var(--color-sea-green)' : 'var(--color-black-40)',
+                    color: getStepNumberColor(step),
                     fontSize: '18px',
                     fontWeight: 'bold'
                   }}>
