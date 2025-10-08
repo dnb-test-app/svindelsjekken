@@ -47,7 +47,6 @@ export const API = {
   // Request timeouts
   DEFAULT_TIMEOUT_MS: 30000, // 30 seconds
   OCR_TIMEOUT_MS: 60000,     // 60 seconds
-  MODEL_TEST_TIMEOUT_MS: 10000, // 10 seconds
 
   // Retry configuration
   MAX_RETRIES: 3,
@@ -69,16 +68,12 @@ export const UI = {
 
   // Pagination
   ITEMS_PER_PAGE: 50,
-  MAX_VISIBLE_MODELS: 50,
 } as const;
 
 /**
  * Local Storage Keys
  */
 export const STORAGE_KEYS = {
-  SELECTED_MODEL: 'selectedAIModel',
-  CACHED_MODELS: 'cachedModels',
-  MODEL_TEST_RESULTS: 'modelTestResults',
   USER_PREFERENCES: 'userPreferences',
   THEME: 'theme',
   LOCALE: 'locale',
@@ -88,7 +83,6 @@ export const STORAGE_KEYS = {
  * Feature Flags
  */
 export const FEATURES = {
-  ENABLE_MODEL_SELECTION: true,
   ENABLE_WEB_SEARCH: true,
   ENABLE_OCR: true,
   ENABLE_DEEP_CHECK: true,

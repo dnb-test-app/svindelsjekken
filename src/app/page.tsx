@@ -17,10 +17,8 @@ import AnalysisStep from "@/components/AnalysisStep";
 import ResultsStep from "@/components/ResultsStep";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import ErrorDialog from "@/components/ErrorDialog";
-import AdminModeSelector from "@/components/AdminModeSelector";
 import { isMinimalContextURL } from "@/lib/urlAnalyzer";
 import { fileToBase64 } from "@/lib/utils/fileHelpers";
-import { getModelName } from "@/lib/utils/modelHelpers";
 import {
   prepareImageData,
   checkWebVerificationNeeds,
@@ -36,8 +34,6 @@ import { useAnalysisState } from "@/hooks/useAnalysisState";
 import {
   FILE_UPLOAD,
   ANALYSIS,
-  STORAGE_KEYS,
-  UI,
   APP,
 } from "@/lib/constants/appConstants";
 
@@ -46,132 +42,10 @@ export default function Home() {
   const imageUpload = useImageUpload();
   const analysisState = useAnalysisState();
 
-  // Model selection states
-  const [showModelSelector, setShowModelSelector] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("openai/gpt-5-mini");
-  const [defaultModel, setDefaultModel] = useState("openai/gpt-5-mini");
-  const [hasUserSelectedModel, setHasUserSelectedModel] = useState(false);
-  const [pendingModel, setPendingModel] = useState<string>("");
-
   // Stepper states
   const stepperState = useStepperState();
   const [preliminaryAnalysis, setPreliminaryAnalysis] = useState<any>(null);
   const [requiresRefinement, setRequiresRefinement] = useState(false);
-
-  // Dynamic models state
-  const [availableModels, setAvailableModels] = useState<any[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const [modelsFetched, setModelsFetched] = useState(false);
-  const [testingModel, setTestingModel] = useState<string | null>(null);
-  const [modelTestResults, setModelTestResults] = useState<Record<string, any>>(
-    {},
-  );
-  const [batchTesting, setBatchTesting] = useState(false);
-  const [modelFilter, setModelFilter] = useState("");
-
-  // Load saved model preference and test results
-  useEffect(() => {
-    // Load test results from localStorage
-    const savedTestResults = localStorage.getItem(
-      STORAGE_KEYS.MODEL_TEST_RESULTS,
-    );
-    if (savedTestResults) {
-      try {
-        setModelTestResults(JSON.parse(savedTestResults));
-      } catch (e) {
-        console.error("Failed to parse saved test results");
-      }
-    }
-
-    fetch("/api/analyze")
-      .then((res) => res.json())
-      .then((data) => {
-        const apiDefaultModel = data.defaultModel || "openai/gpt-5-mini";
-        setDefaultModel(apiDefaultModel);
-
-        const saved = localStorage.getItem(STORAGE_KEYS.SELECTED_MODEL);
-        const selectedModelId = saved || apiDefaultModel;
-        setSelectedModel(selectedModelId);
-        setHasUserSelectedModel(saved !== null && saved !== apiDefaultModel);
-      })
-      .catch(() => {
-        // Fallback if API fails
-        const fallbackDefault = "openai/gpt-5-mini";
-        setDefaultModel(fallbackDefault);
-
-        const saved = localStorage.getItem(STORAGE_KEYS.SELECTED_MODEL);
-        const selectedModelId = saved || fallbackDefault;
-        setSelectedModel(selectedModelId);
-        setHasUserSelectedModel(saved !== null && saved !== fallbackDefault);
-      });
-  }, []);
-
-  // Fetch available models from API (with optional fresh fetch)
-  const fetchAvailableModels = useCallback(
-    async (forceFresh = false) => {
-      if (!forceFresh && modelsFetched) return;
-      if (isLoadingModels) return;
-
-      setIsLoadingModels(true);
-      try {
-        const url = forceFresh
-          ? "/api/fetch-models?fresh=true"
-          : "/api/fetch-models";
-        const response = await fetch(url);
-
-        if (response.ok) {
-          const data = await response.json();
-          console.info(
-            `Fetched ${data.totalModels} models (${data.verifiedCount} verified)`,
-          );
-
-          if (data.models && data.models.length > 0) {
-            setAvailableModels(data.models);
-            setModelsFetched(true);
-
-            // Store in localStorage for quick loading
-            localStorage.setItem(
-              STORAGE_KEYS.CACHED_MODELS,
-              JSON.stringify({
-                timestamp: data.timestamp,
-                models: data.models,
-              }),
-            );
-
-            // If current model isn't in the list, switch to recommended
-            const currentModelAvailable = data.models.some(
-              (m: any) => m.id === selectedModel,
-            );
-            if (!currentModelAvailable && data.recommended) {
-              setSelectedModel(data.recommended.id);
-              localStorage.setItem(
-                STORAGE_KEYS.SELECTED_MODEL,
-                data.recommended.id,
-              );
-            }
-          }
-        } else {
-          console.error("Failed to fetch models:", response.status);
-        }
-      } catch (error) {
-        console.error("Failed to fetch models:", error);
-      } finally {
-        setIsLoadingModels(false);
-      }
-    },
-    [modelsFetched, isLoadingModels, selectedModel],
-  );
-
-  // Easter egg: Check for "RaiRai" in text
-  useEffect(() => {
-    if (
-      analysisState.text.toLowerCase().includes("rairai") &&
-      !showModelSelector
-    ) {
-      setShowModelSelector(true);
-      fetchAvailableModels(); // Fetch models when admin mode is activated
-    }
-  }, [analysisState.text, showModelSelector, fetchAvailableModels]);
 
   // URL detection: Check if input contains URLs with minimal context
   useEffect(() => {
@@ -186,7 +60,7 @@ export default function Home() {
     analysisState.setResult(null);
 
     // Clean text for API
-    const analysisText = analysisState.text.replace(/rairai/gi, "").trim();
+    const analysisText = analysisState.text.trim();
 
     // Prepare image data if file was uploaded
     const imageData = await prepareImageData(
@@ -217,9 +91,6 @@ export default function Home() {
 
     // Prepare analysis request
     try {
-      const baseModel =
-        typeof selectedModel === "string" ? selectedModel : defaultModel;
-      const modelToUse = needsVerification ? `${baseModel}:online` : baseModel;
       const context = buildAnalysisContext(
         imageData,
         imageUpload.ocrText,
@@ -227,13 +98,12 @@ export default function Home() {
         analysisState.urlDetected,
       );
 
-      // Call analysis API
+      // Call analysis API (uses DEFAULT_AI_MODEL from env)
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: analysisText,
-          model: modelToUse,
           context,
         }),
       });
@@ -320,12 +190,10 @@ export default function Home() {
     stepperState.goToStep(3);
 
     // Clean text for API
-    const cleanedText = analysisState.text.replace(/rairai/gi, "").trim();
+    const cleanedText = analysisState.text.trim();
     const refinedText = cleanedText;
 
     try {
-      const modelToUse =
-        typeof selectedModel === "string" ? selectedModel : defaultModel;
 
       // Combine URL context with refinement context
       let combinedContext = refinementContext;
@@ -367,7 +235,6 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: refinedText,
-          model: modelToUse,
           context: contextData,
         }),
       });
@@ -450,174 +317,6 @@ export default function Home() {
     analysisState.setIsWebVerifying(false);
   };
 
-  const handleModelChange = (e: any) => {
-    // DNB Dropdown passes { data: { value, content, ... } }
-    let model = null;
-
-    if (typeof e === "string") {
-      model = e;
-    } else if (e?.data?.value) {
-      model = e.data.value;
-    } else if (e?.value) {
-      model = e.value;
-    }
-
-    if (model && model !== selectedModel) {
-      setPendingModel(model);
-    }
-  };
-
-  const handleSaveModel = () => {
-    if (pendingModel) {
-      setSelectedModel(pendingModel);
-      setHasUserSelectedModel(pendingModel !== defaultModel);
-      localStorage.setItem(STORAGE_KEYS.SELECTED_MODEL, pendingModel);
-      setPendingModel("");
-    }
-  };
-
-  const handleCancelModel = () => {
-    setPendingModel("");
-  };
-
-  // Test a specific model
-  const testModel = async (modelId: string) => {
-    setTestingModel(modelId);
-
-    try {
-      const response = await fetch("/api/test-model", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ modelId }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-
-        // Update test results
-        const newResults = {
-          ...modelTestResults,
-          [modelId]: {
-            working: result.working,
-            supportsJson: result.supportsJson,
-            error: result.error,
-            errorType: result.errorType,
-            testedAt: new Date().toISOString(),
-            responseTime: result.responseTime,
-          },
-        };
-
-        setModelTestResults(newResults);
-        localStorage.setItem(
-          STORAGE_KEYS.MODEL_TEST_RESULTS,
-          JSON.stringify(newResults),
-        );
-
-        // Update available models with test result
-        setAvailableModels((prev) =>
-          prev.map((model) =>
-            model.id === modelId
-              ? {
-                  ...model,
-                  status: result.working ? "verified" : "failed",
-                  working: result.working,
-                  supportsJson: result.supportsJson,
-                  lastTested: new Date().toISOString(),
-                }
-              : model,
-          ),
-        );
-      }
-    } catch (error) {
-      console.error("Failed to test model:", error);
-    } finally {
-      setTestingModel(null);
-    }
-  };
-
-  // Test top models in batch
-  const testTopModels = async () => {
-    setBatchTesting(true);
-
-    try {
-      // Get top 50 untested or failed models
-      const modelsToTest = availableModels
-        .filter((m) => m.status === "untested" || m.status === "failed")
-        .slice(0, 50)
-        .map((m) => m.id);
-
-      if (modelsToTest.length === 0) {
-        console.warn("No models to test!");
-        return;
-      }
-
-      const response = await fetch("/api/test-models-batch", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          modelIds: modelsToTest,
-          testDepth: "standard",
-          maxConcurrent: 5,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-
-        // Update test results for each model
-        const newResults = { ...modelTestResults };
-        data.results.forEach((result: any) => {
-          newResults[result.modelId] = {
-            working: result.working,
-            supportsJson: result.supportsJson,
-            errors: result.errors,
-            accuracy: result.accuracy,
-            responseTime: result.responseTime,
-            testedAt: new Date().toISOString(),
-          };
-        });
-
-        setModelTestResults(newResults);
-        localStorage.setItem(
-          STORAGE_KEYS.MODEL_TEST_RESULTS,
-          JSON.stringify(newResults),
-        );
-
-        // Update available models with test results
-        setAvailableModels((prev) =>
-          prev.map((model) => {
-            const testResult = data.results.find(
-              (r: any) => r.modelId === model.id,
-            );
-            if (testResult) {
-              return {
-                ...model,
-                status: testResult.working ? "verified" : "failed",
-                working: testResult.working,
-                supportsJson: testResult.supportsJson,
-                accuracy: testResult.accuracy,
-                lastTested: new Date().toISOString(),
-              };
-            }
-            return model;
-          }),
-        );
-
-        console.info(
-          `Tested ${data.statistics.totalTested} models: ${data.statistics.working} working, ${data.statistics.withJsonSupport} with JSON support`,
-        );
-      }
-    } catch (error) {
-      console.error("Batch test failed:", error);
-    } finally {
-      setBatchTesting(false);
-    }
-  };
-
   return (
     <div className="container">
       {/* Header */}
@@ -686,31 +385,6 @@ export default function Home() {
                 onRemoveImage={imageUpload.handleRemoveImage}
               />
             </ErrorBoundary>
-
-            {/* Hidden Model Selector - Easter Egg */}
-            {showModelSelector && (
-              <AdminModeSelector
-                selectedModel={selectedModel}
-                defaultModel={defaultModel}
-                availableModels={availableModels}
-                isLoadingModels={isLoadingModels}
-                modelFilter={modelFilter}
-                setModelFilter={setModelFilter}
-                onModelSelect={(modelId) => {
-                  setSelectedModel(modelId);
-                  setHasUserSelectedModel(true);
-                  localStorage.setItem(STORAGE_KEYS.SELECTED_MODEL, modelId);
-                }}
-                onExitAdminMode={() => {
-                  setShowModelSelector(false);
-                  setSelectedModel(defaultModel);
-                  setHasUserSelectedModel(false);
-                  localStorage.removeItem(STORAGE_KEYS.SELECTED_MODEL);
-                  setPendingModel("");
-                  analysisState.setText(""); // Clear the rairai text
-                }}
-              />
-            )}
           </div>
         )}
 
