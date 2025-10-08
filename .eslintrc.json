@@ -1,3 +1,27 @@
 {
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "no-alert": "error",
+    "no-restricted-globals": [
+      "error",
+      {
+        "name": "alert",
+        "message": "Use ErrorDialog component instead of alert()"
+      },
+      {
+        "name": "confirm",
+        "message": "Use DNB Eufemia Dialog component instead of confirm()"
+      },
+      {
+        "name": "prompt",
+        "message": "Use DNB Eufemia Input in a Dialog instead of prompt()"
+      }
+    ],
+    "no-console": [
+      "warn",
+      {
+        "allow": ["warn", "error", "info"]
+      }
+    ]
+  }
 }

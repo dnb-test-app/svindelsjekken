@@ -806,29 +806,38 @@ chore(deps): oppgrader Next.js til 14.2.0
 - `(security)`: Sikkerhet
 
 ### Versjonering
-**VIKTIG**: Ved hver commit skal versjonsnummeret oppdateres i **BEGGE** disse filene:
+**🚨 KRITISK**: Ved hver commit skal versjonsnummeret oppdateres i **BEGGE** disse filene:
 1. `package.json` - linje 3
 2. `src/lib/constants/appConstants.ts` - linje 103 (APP.VERSION)
 
-**Format**: `YYYY-MM-DD.BUILD`
-- Dato: Dagens dato (bruk systemdato)
-- Build-nummer: Inkrementer fra forrige build samme dag (start på 1)
+**Format**: `YYYY.MM-BUILD`
+- År.Måned: Dagens dato (bruk systemdato med `date +%Y.%m`)
+- Build-nummer: **ALLTID inkrementer fra forrige build** - ALDRI reset!
+
+**⛔ ABSOLUTT REGEL - ALDRI BRYT DENNE:**
+- **ALDRI reset build-nummeret** - ikke ved ny dag, ikke ved ny måned, ikke ved nytt år
+- **ALLTID inkrementer**: Hvis forrige versjon var `2025.10-5`, neste er `2025.10-6`
+- **SELV OM MÅNEDEN ENDRES**: `2025.10-99` → `2025.11-100` (IKKE 2025.11-1)
+- Build-nummeret skal kun øke, aldri synke eller resette
 
 Eksempel:
 ```json
-// package.json - Første commit 3. oktober 2025
-"version": "2025-10-03.1"
+// package.json - Versjon 5 i oktober 2025
+"version": "2025.10-5"
 
 // appConstants.ts
-VERSION: '2025-10-03.1'
+VERSION: '2025.10-5'
 
-// Andre commit samme dag
-"version": "2025-10-03.2"
-VERSION: '2025-10-03.2'
+// Neste commit samme måned
+"version": "2025.10-6"
+VERSION: '2025.10-6'
 
-// Første commit neste dag
-"version": "2025-10-04.1"
-VERSION: '2025-10-04.1'
+// Commit i november (IKKE reset build!)
+"version": "2025.11-7"  // ← Fortsett å inkrementer
+VERSION: '2025.11-7'
+
+// ALDRI gjør dette:
+"version": "2025.11-1"  // ❌ FEIL! Build resatt
 ```
 
 ## 🚨 RECOVERY INSTRUCTIONS - VED DESIGN-BRUDD
