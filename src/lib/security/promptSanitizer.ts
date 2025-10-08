@@ -77,3 +77,23 @@ export function validateInput(input: string): { valid: boolean; reason?: string 
 
   return { valid: true };
 }
+
+/**
+ * Escapes XML special characters to prevent structure injection
+ *
+ * Prevents users from breaking out of XML tags by escaping:
+ * - & (must be first to avoid double-escaping)
+ * - < (prevents opening tags)
+ * - > (prevents closing tags)
+ *
+ * Example: User input "</tag>attack<tag>" becomes "&lt;/tag&gt;attack&lt;tag&gt;"
+ *
+ * This is NOT for security (role separation handles that), but for structure clarity.
+ * It ensures the AI correctly parses which content belongs where.
+ */
+export function escapeXml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')   // Must be first
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}

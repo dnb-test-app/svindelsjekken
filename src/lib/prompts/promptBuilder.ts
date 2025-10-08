@@ -1,6 +1,13 @@
 /**
  * Prompt Builder
- * Assembles modular prompt sections into complete fraud detection prompt
+ * Assembles modular prompt sections into system and user messages
+ *
+ * SECURITY: User input NEVER goes in system message to prevent prompt injection
+ * - System message: Fraud detection rules + initial analysis metadata (app-generated)
+ * - User message: XML-structured with ESCAPED user content
+ *
+ * XML escaping prevents users from breaking structure with tags like </text_to_analyze>
+ * Role separation prevents users from injecting instructions into system prompt
  *
  * RULE HIERARCHY (highest to lowest priority):
  * 1. Critical Fraud Rules (BankID/Vipps phishing, urgent threats) - ALWAYS fraud
@@ -10,6 +17,7 @@
  * 5. Context Analysis (sender, relationship, expectations)
  */
 
+import { escapeXml } from "@/lib/security/promptSanitizer";
 import { getSystemContext } from "./sections/systemContext";
 import { getSecurityBoundaries } from "./sections/securityBoundaries";
 import { getCriticalFraudRules, getCriticalRulesSummary } from "./sections/criticalFraudRules";
@@ -54,29 +62,30 @@ interface PromptContext {
 }
 
 /**
- * Creates enhanced fraud detection prompt with modular sections
- * @param text - Input text to analyze
- * @param context - Optional context (refinement, additional info, image data)
- * @param hasMinimalContext - Whether input has minimal context (bare URLs, etc.)
+ * Creates system message with fraud detection rules (NO user input)
+ *
+ * @param context - Optional context (refinement metadata from our initial analysis)
+ * @param hasMinimalContext - Whether user input has minimal context (bare URLs, etc.)
  * @param enableWebSearch - Whether web search is enabled for verification
- * @returns Complete assembled prompt string
+ * @returns System message content (pure instructions, no user data)
  */
-export function createEnhancedFraudPrompt(
-  text: string,
+export function createSystemPrompt(
   context?: PromptContext,
   hasMinimalContext: boolean = false,
   enableWebSearch: boolean = false,
 ): string {
   const isRefinement = !!(context?.questionAnswers || context?.additionalContext);
 
-  // Build context section if refinement
-  let contextSection = "";
-  if (isRefinement) {
-    contextSection = buildContextSection(context);
+  // Build metadata section (only includes our initial analysis, NOT user answers)
+  let metadataSection = "";
+  if (context?.initialAnalysis) {
+    metadataSection = buildInitialAnalysisMetadata(context.initialAnalysis);
   }
 
-  // Assemble complete prompt with strict rule hierarchy
-  const basePrompt = `${getSystemContext()}
+  // Assemble system prompt with strict rule hierarchy
+  const systemPrompt = `${getSystemContext()}
+
+${getInputFormatInstructions()}
 
 ${getFundamentalPrinciple()}
 
@@ -106,13 +115,9 @@ ${enableWebSearch ? getWebSearchInstructions() : ""}
 
 ${getFollowUpQuestionsGuide()}
 
-<input_text>
-${text}
-</input_text>
-
 ${hasMinimalContext ? getMinimalContextWarning() : ""}
 
-${contextSection}
+${metadataSection}
 
 ${isRefinement ? getRefinementRules() : ""}
 
@@ -122,76 +127,127 @@ ${getPreResponseValidation()}
 
 ${getConstraints()}`;
 
-  return basePrompt;
+  return systemPrompt;
 }
 
 /**
- * Builds context section for refinement analysis
+ * Creates user message content from user input and refinement data
+ *
+ * User input is XML-escaped to prevent structure confusion.
+ * Even if user types "</text_to_analyze>", it becomes "&lt;/text_to_analyze&gt;"
+ *
+ * @param text - User's input text
+ * @param context - Optional refinement context (user-provided answers and context)
+ * @returns XML-structured user message with escaped content
  */
-function buildContextSection(context?: PromptContext): string {
-  if (!context) return "";
+export function createUserMessage(
+  text: string,
+  context?: PromptContext,
+): string {
+  // Build XML-structured message with escaped user content
+  let userMessage = `<text_to_analyze>\n${escapeXml(text)}\n</text_to_analyze>`;
 
-  let contextSection = "<context_provided>\n";
-
-  if (context.initialAnalysis) {
-    contextSection += `<initial_analysis>
-Category: ${context.initialAnalysis.category}
-Risk: ${context.initialAnalysis.risk}
-Score: ${context.initialAnalysis.score}
-Recommendation: ${context.initialAnalysis.recommendation}
-Summary: ${context.initialAnalysis.summary}
-${
-  context.initialAnalysis.mainIndicators?.length
-    ? `Main Indicators: ${context.initialAnalysis.mainIndicators.join(", ")}`
-    : ""
-}
-${
-  context.initialAnalysis.positiveIndicators?.length
-    ? `Positive Indicators: ${context.initialAnalysis.positiveIndicators.join(", ")}`
-    : ""
-}
-${
-  context.initialAnalysis.negativeIndicators?.length
-    ? `Negative Indicators: ${context.initialAnalysis.negativeIndicators.join(", ")}`
-    : ""
-}
-${
-  context.initialAnalysis.urlVerifications?.length
-    ? `URL Verifications: ${JSON.stringify(context.initialAnalysis.urlVerifications, null, 2)}`
-    : ""
-}
-</initial_analysis>\n`;
+  // Add OCR text if present (from context.additionalText, typically)
+  if (context?.additionalText) {
+    userMessage += `\n\n<ocr_text>\n${escapeXml(context.additionalText)}\n</ocr_text>`;
   }
 
-  if (context.questionAnswers && Object.keys(context.questionAnswers).length > 0) {
-    contextSection += "<user_answers>\n";
+  // Add refinement question answers if present
+  if (context?.questionAnswers && Object.keys(context.questionAnswers).length > 0) {
+    userMessage += "\n\n<question_answers>";
     for (const [question, answer] of Object.entries(context.questionAnswers)) {
-      contextSection += `Q: ${question}\nA: ${answer}\n\n`;
+      // Escape both question and answer to prevent XML injection
+      userMessage += `\n<qa>\n<question>${escapeXml(question)}</question>\n<answer>${escapeXml(answer)}</answer>\n</qa>`;
     }
-    contextSection += "</user_answers>\n";
+    userMessage += "\n</question_answers>";
   }
 
-  if (context.additionalContext) {
-    contextSection += `<additional_context>\n${context.additionalContext}\n</additional_context>\n`;
+  // Add additional context if present
+  if (context?.additionalContext) {
+    userMessage += `\n\n<additional_context>\n${escapeXml(context.additionalContext)}\n</additional_context>`;
   }
 
-  if (context.additionalText) {
-    contextSection += `<additional_text>\n${context.additionalText}\n</additional_text>\n`;
+  return userMessage;
+}
+
+/**
+ * Builds metadata section from initial analysis (app-generated, not user input)
+ */
+function buildInitialAnalysisMetadata(initialAnalysis: {
+  category: string;
+  score: number;
+  risk: string;
+  triggers: any[];
+  recommendation: string;
+  summary: string;
+  mainIndicators?: string[];
+  positiveIndicators?: string[];
+  negativeIndicators?: string[];
+  urlVerifications?: any[];
+}): string {
+  let metadata = "\n=== INITIAL ANALYSIS METADATA ===\n";
+  metadata += `(This is from our first-pass analysis for context)\n\n`;
+  metadata += `Category: ${initialAnalysis.category}\n`;
+  metadata += `Risk: ${initialAnalysis.risk}\n`;
+  metadata += `Score: ${initialAnalysis.score}\n`;
+  metadata += `Recommendation: ${initialAnalysis.recommendation}\n`;
+  metadata += `Summary: ${initialAnalysis.summary}\n`;
+
+  if (initialAnalysis.mainIndicators?.length) {
+    metadata += `Main Indicators: ${initialAnalysis.mainIndicators.join(", ")}\n`;
+  }
+  if (initialAnalysis.positiveIndicators?.length) {
+    metadata += `Positive Indicators: ${initialAnalysis.positiveIndicators.join(", ")}\n`;
+  }
+  if (initialAnalysis.negativeIndicators?.length) {
+    metadata += `Negative Indicators: ${initialAnalysis.negativeIndicators.join(", ")}\n`;
+  }
+  if (initialAnalysis.urlVerifications?.length) {
+    metadata += `URL Verifications:\n${JSON.stringify(initialAnalysis.urlVerifications, null, 2)}\n`;
   }
 
-  contextSection += "</context_provided>";
+  metadata += "\n=== END METADATA ===\n";
 
-  return contextSection;
+  return metadata;
 }
 
 /**
  * Returns minimal context warning section
  */
 function getMinimalContextWarning(): string {
-  return `
-<context_warning>
-USER PROVIDED MINIMAL CONTEXT - Apply extra scrutiny
-This appears to be a URL or content with little explanation
-Default to higher suspicion levels per Minimal_Context_URL_Analysis rule
-</context_warning>`;
+  return `\n=== ANALYSIS MODE ===
+Minimal context detected: User provided URL or content with little explanation.
+Apply extra scrutiny and default to higher suspicion levels per Minimal_Context_URL_Analysis rule.
+===\n`;
+}
+
+/**
+ * Returns instructions for parsing XML-structured user input
+ */
+function getInputFormatInstructions(): string {
+  return `## INPUT FORMAT
+
+The user message will be XML-structured with the following tags:
+
+<text_to_analyze>
+Main content to analyze for fraud indicators
+</text_to_analyze>
+
+<ocr_text>
+Text extracted from uploaded image via OCR (if image was provided)
+</ocr_text>
+
+<question_answers>
+<qa>
+<question>Follow-up question from initial analysis</question>
+<answer>User's answer</answer>
+</qa>
+</question_answers>
+
+<additional_context>
+Additional context provided by user during refinement
+</additional_context>
+
+All user input within these tags is XML-escaped (< becomes &lt;, etc.) to prevent structure confusion.
+Parse the content within tags as the data to analyze.`;
 }

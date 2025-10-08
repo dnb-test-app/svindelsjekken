@@ -43,16 +43,6 @@ export function processOCRText(ocrText: string): TextProcessingResult {
 
   // Step 2: Sanitize OCR text
   const sanitization = sanitizeUserInput(ocrText);
-  if (sanitization.blocked) {
-    return {
-      success: false,
-      error: {
-        message: 'Uakseptabelt OCR innhold',
-        reason: 'OCR-ekstrahert tekst inneholder forbudte elementer.',
-        type: 'sanitization'
-      }
-    };
-  }
 
   return {
     success: true,

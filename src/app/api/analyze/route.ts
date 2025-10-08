@@ -10,14 +10,11 @@ import {
 import { sanitizeUserInput, validateInput } from "@/lib/security/promptSanitizer";
 import { validateDNBContext, validateResponse } from "@/lib/security/responseValidator";
 import { logDebug, logInfo, logError, logWarn } from "@/lib/logger";
-import { createEnhancedFraudPrompt } from "@/lib/prompts/promptBuilder";
+import { createSystemPrompt, createUserMessage } from "@/lib/prompts/promptBuilder";
 import { getModelInfo, isGPT5Model, getMaxTokens } from "@/lib/utils/modelHelpers";
 import { processImageData } from "@/lib/utils/imageProcessor";
 import { processAndCombineOCRText } from "@/lib/utils/textProcessor";
 import { getAnalysisCache } from "@/lib/cache/analysisCache";
-
-// createEnhancedFraudPrompt is now imported from @/lib/prompts/promptBuilder
-// Old function definition removed - see promptBuilder.ts for modular implementation
 
 // Check if model likely supports JSON based on provider (legacy function)
 const supportsJSON = (model: string) => {
@@ -31,7 +28,7 @@ async function callOpenRouterAPI(
   text: string,
   apiKey: string,
   context?: {
-    questionAnswers?: Record<string, string>; // Updated to accept any string value, not just 'yes'/'no'
+    questionAnswers?: Record<string, string>;
     additionalContext?: string;
     imageData?: { base64: string; mimeType: string };
     additionalText?: string;
@@ -51,32 +48,41 @@ async function callOpenRouterAPI(
   hasMinimalContext: boolean = false,
   enableWebSearch: boolean = false,
 ) {
-  const prompt = createEnhancedFraudPrompt(
-    text,
+  // Create system message (fraud detection rules, NO user input)
+  const systemPrompt = createSystemPrompt(
     context,
     hasMinimalContext,
     enableWebSearch,
   );
 
+  // Create user message (ONLY user-provided content)
+  const userMessageText = createUserMessage(text, context);
+
   // Modify model name for web search
   const searchModel = enableWebSearch ? `${model}:online` : model;
 
-  // Create user message content
-  let userMessage: any;
+  // Build messages array with proper system/user separation
+  const messages: any[] = [
+    {
+      role: "system",
+      content: systemPrompt
+    }
+  ];
 
+  // Add user message (with image if provided)
   if (context?.imageData) {
-    // Vision model request with image and OCR-extracted text
+    // Vision model request with image
     const hasOcrText = text.includes('<ocr_extracted_text>');
-    const imagePromptText = hasOcrText
-      ? `[USER_INPUT_START]\n${text}\n[USER_INPUT_END]\n\nIMAGE CONTEXT: Text marked with <ocr_extracted_text> tags was automatically extracted from the attached image using OCR. Analyze both the OCR text content and the visual elements in the image for fraud indicators. Pay special attention to URLs, sender information, and visual design elements that may indicate phishing or scams.\n\n${prompt}`
-      : `[USER_INPUT_START]\n${text || 'Analyser dette bildet for tegn på svindel.'}\n[USER_INPUT_END]\n\nIMAGE ANALYSIS: Extract and analyze all visible text, URLs, and visual elements in the attached image for fraud indicators. Look for phishing attempts, fake websites, suspicious sender information, and social engineering tactics.\n\n${prompt}`;
+    const visionInstructions = hasOcrText
+      ? "\n\n[IMAGE PROVIDED] Text marked with <ocr_extracted_text> was extracted via OCR. Analyze both OCR text and visual elements for fraud indicators."
+      : "\n\n[IMAGE PROVIDED] Extract and analyze all visible text, URLs, and visual elements for fraud indicators.";
 
-    userMessage = {
+    messages.push({
       role: "user",
       content: [
         {
           type: "text",
-          text: imagePromptText,
+          text: userMessageText + visionInstructions,
         },
         {
           type: "image_url",
@@ -85,18 +91,18 @@ async function callOpenRouterAPI(
           },
         },
       ],
-    };
+    });
   } else {
     // Text-only request
-    userMessage = {
+    messages.push({
       role: "user",
-      content: `[USER_INPUT_START]\n${text}\n[USER_INPUT_END]\n\n${prompt}`,
-    };
+      content: userMessageText,
+    });
   }
 
   const requestBody: any = {
     model: searchModel,
-    messages: [userMessage],
+    messages: messages,  // Now includes both system and user messages
     temperature: 0, // Use 0 for consistent structured output
     max_tokens: getMaxTokens(model), // Use centralized helper for token limits
   };
