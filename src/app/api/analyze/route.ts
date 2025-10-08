@@ -214,19 +214,6 @@ export async function POST(request: NextRequest) {
     // Step 2: Sanitize raw input
     if (text.trim()) {
       const sanitizationResult = sanitizeUserInput(text);
-      if (sanitizationResult.blocked) {
-        return NextResponse.json({
-          category: 'fraud',
-          risk: 'high',
-          score: 90,
-          mainIndicators: ['Uakseptabelt innhold'],
-          recommendation: 'Innholdet inneholder forbudte elementer.',
-          summary: 'Forespørselen ble blokkert av sikkerhetsgrunner.',
-          securityBlock: true,
-          requestId
-        });
-      }
-
       // Use sanitized text from now on
       text = sanitizationResult.sanitized;
     }
