@@ -14,25 +14,25 @@ describe('promptSanitizer', () => {
       expect(result.sanitized).toBe(text);
     });
 
+    it('should remove control characters', () => {
+      const text = 'Hello\x00World\x1F!';
+      const result = sanitizeUserInput(text);
+      expect(result.sanitized).toBe('HelloWorld!');
+      expect(result.warnings).toContain('Removed control characters or invisible Unicode');
+    });
+
+    it('should remove zero-width Unicode characters', () => {
+      const text = 'Hello\u200BWorld\u200C!';
+      const result = sanitizeUserInput(text);
+      expect(result.sanitized).toBe('HelloWorld!');
+      expect(result.warnings).toContain('Removed control characters or invisible Unicode');
+    });
+
     it('should truncate at 10000 characters', () => {
       const longText = 'a'.repeat(15000);
       const result = sanitizeUserInput(longText);
       expect(result.sanitized.length).toBe(10000);
       expect(result.warnings).toContain('Input truncated to maximum length');
-    });
-
-    it('should remove control characters', () => {
-      const text = 'Normal\x00text\x01with\x02control';
-      const result = sanitizeUserInput(text);
-      expect(result.sanitized).toBe('Normaltextwithcontrol');
-      expect(result.warnings).toContain('Control characters removed');
-    });
-
-    it('should remove zero-width Unicode', () => {
-      const text = 'test\u200Bword';
-      const result = sanitizeUserInput(text);
-      expect(result.sanitized).toBe('testword');
-      expect(result.sanitized).not.toContain('\u200B');
     });
   });
 
