@@ -100,7 +100,7 @@ export const FEATURES = {
  */
 export const APP = {
   NAME: 'DNB Svindelsjekk',
-  VERSION: '2025.10-6',
+  VERSION: '2025.10-7',
   SUPPORT_PHONE: '915 04800',
   SUPPORT_URL: 'https://www.dnb.no/sikkerhet',
 } as const;

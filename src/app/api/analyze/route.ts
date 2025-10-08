@@ -168,7 +168,7 @@ async function callOpenRouterAPI(
     throw new Error(`Failed to parse JSON response from ${model}: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
   }
 
-  const content = data.choices[0]?.message?.content;
+  const content = data.choices?.[0]?.message?.content;
 
   if (!content) {
     throw new Error(`No response content from ${model}`);

@@ -4,7 +4,7 @@
  */
 
 import { hasMinimalContext, extractURLs, deduplicateURLsByDomain, extractDomain, hasCriticalAuthPattern } from './urlAnalyzer';
-import { PHONE_NUMBER_PATTERNS, matchesAnyPattern } from './constants/fraudPatterns';
+import { PHONE_NUMBER_PATTERNS, BANK_ACCOUNT_PATTERNS, URL_PATTERNS, matchesAnyPattern, urlContainsAny } from './constants/fraudPatterns';
 
 /**
  * Detect Norwegian phone numbers in various formats
@@ -17,7 +17,6 @@ export function hasNorwegianPhoneNumber(text: string): boolean {
  * Detect Norwegian bank account numbers or IBAN
  */
 export function hasBankAccountNumber(text: string): boolean {
-  const { BANK_ACCOUNT_PATTERNS } = require('./constants/fraudPatterns');
   return matchesAnyPattern(text, BANK_ACCOUNT_PATTERNS);
 }
 
@@ -55,8 +54,6 @@ export function hasURLsNeedingVerification(text: string): boolean {
   if (hasMinimalContext(text)) return true;
 
   // Also check for suspicious patterns that warrant web verification
-  const { URL_PATTERNS, urlContainsAny } = require('./constants/fraudPatterns');
-
   return urls.some((url: string) => {
     const lowerUrl = url.toLowerCase();
     const domain = extractDomain(url);
