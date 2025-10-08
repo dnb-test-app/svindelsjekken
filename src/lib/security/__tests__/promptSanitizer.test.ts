@@ -1,8 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
 import {
   sanitizeUserInput,
-  validateInput,
-  escapeForPrompt
+  validateInput
 } from '../promptSanitizer';
 
 describe('promptSanitizer', () => {
@@ -51,28 +50,6 @@ describe('promptSanitizer', () => {
     it('should reject whitespace-only input', () => {
       const result = validateInput('     ');
       expect(result.valid).toBe(false);
-    });
-  });
-
-  describe('escapeForPrompt', () => {
-    it('should escape backslashes', () => {
-      expect(escapeForPrompt('C:\\file')).toBe('C:\\\\file');
-    });
-
-    it('should escape quotes', () => {
-      expect(escapeForPrompt('Say "hello"')).toBe('Say \\"hello\\"');
-    });
-
-    it('should escape newlines', () => {
-      expect(escapeForPrompt('line1\nline2')).toBe('line1\\nline2');
-    });
-
-    it('should escape tabs', () => {
-      expect(escapeForPrompt('col1\tcol2')).toBe('col1\\tcol2');
-    });
-
-    it('should escape carriage returns', () => {
-      expect(escapeForPrompt('text\rmore')).toBe('text\\rmore');
     });
   });
 });

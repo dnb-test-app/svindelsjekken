@@ -77,15 +77,3 @@ export function validateInput(input: string): { valid: boolean; reason?: string 
 
   return { valid: true };
 }
-
-/**
- * Escapes user input for safe embedding in prompts
- */
-export function escapeForPrompt(input: string): string {
-  return input
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r')
-    .replace(/\t/g, '\\t');
-}
