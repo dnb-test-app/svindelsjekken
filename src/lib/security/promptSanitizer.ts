@@ -1,6 +1,6 @@
 /**
- * Prompt Sanitization Module
- * Ensures input stability and prevents prompt structure breaking
+ * Input Sanitization Module
+ * Real protections only - no security theater
  */
 
 export interface SanitizationResult {
@@ -15,32 +15,25 @@ const CONTROL_CHAR_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\u200B-\u200F\u2
 const MAX_INPUT_LENGTH = 10000;
 
 /**
- * Sanitizes user input for stable prompt processing
- * Focuses on structural safety, not pattern detection
+ * Sanitizes user input
+ * Only real protections: length limits and control char removal
  */
 export function sanitizeUserInput(input: string): SanitizationResult {
   const warnings: string[] = [];
   let sanitized = input;
 
-  // Check length (DoS prevention)
+  // Truncate to max length (DoS prevention, cost control)
   if (sanitized.length > MAX_INPUT_LENGTH) {
     sanitized = sanitized.substring(0, MAX_INPUT_LENGTH);
     warnings.push('Input truncated to maximum length');
   }
 
-  // Remove control characters (parsing safety)
+  // Remove control characters (JSON/encoding safety)
   const controlCharsFound = CONTROL_CHAR_REGEX.test(sanitized);
   if (controlCharsFound) {
     sanitized = sanitized.replace(CONTROL_CHAR_REGEX, '');
     warnings.push('Control characters removed');
   }
-
-  // Escape special delimiters we use in prompts (prevents breaking prompt structure)
-  sanitized = sanitized
-    .replace(/\[USER_INPUT_START\]/gi, '[USER-INPUT-START]')
-    .replace(/\[USER_INPUT_END\]/gi, '[USER-INPUT-END]')
-    .replace(/\[SYSTEM CONTEXT\]/gi, '[SYSTEM-CONTEXT]')
-    .replace(/\[END SYSTEM CONTEXT\]/gi, '[END-SYSTEM-CONTEXT]');
 
   return {
     sanitized,
@@ -49,31 +42,13 @@ export function sanitizeUserInput(input: string): SanitizationResult {
 }
 
 /**
- * Validates that input is safe for LLM processing
- * Focuses on DoS prevention, not content filtering
+ * Validates input meets minimum requirements
+ * Only checks minimum length - prevent accidental empty submissions
  */
 export function validateInput(input: string): { valid: boolean; reason?: string } {
-  // Check if input is too short
+  // Minimum length check (UX only)
   if (input.trim().length < 5) {
     return { valid: false, reason: 'Input too short' };
-  }
-
-  // Check if input is just repeated characters
-  const uniqueChars = new Set(input.replace(/\s/g, ''));
-  if (uniqueChars.size < 3) {
-    return { valid: false, reason: 'Input lacks meaningful content' };
-  }
-
-  // Check for excessive repetition (potential DoS)
-  const words = input.split(/\s+/);
-  const wordCounts = new Map<string, number>();
-  for (const word of words) {
-    wordCounts.set(word, (wordCounts.get(word) || 0) + 1);
-  }
-
-  const maxRepetition = Math.max(...wordCounts.values());
-  if (maxRepetition > words.length * 0.5 && words.length > 10) {
-    return { valid: false, reason: 'Excessive repetition detected' };
   }
 
   return { valid: true };
